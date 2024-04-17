@@ -1,5 +1,6 @@
 provider "aws" {
-  region = "us-east-1"
+  profile = "sleonov-green"
+  region  = "us-east-1"
 }
 
 #Create key-pair for logging into EC2 in us-east-1
