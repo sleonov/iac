@@ -93,7 +93,3 @@ resource "aws_security_group" "sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
-
-output "Webserver-Public-IP" {
-  value = aws_instance.webserver.public_ip
-}
