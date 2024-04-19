@@ -18,4 +18,11 @@ resource "aws_instance" "my_instance" {
   tags = {
     "Name" = "Howdy"
   }
+  provisioner "local-exec" {
+    command = "echo Instance ${self.id} has been provisioned >> ./status.txt"
+  }
+  provisioner "local-exec" {
+    when = destroy
+    command = "echo Instance ${self.id} has been destroyed >> ./status.txt"
+  }
 }
