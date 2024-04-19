@@ -22,7 +22,7 @@ resource "aws_instance" "my_instance" {
     command = "echo Instance ${self.id} has been provisioned >> ./status.txt"
   }
   provisioner "local-exec" {
-    when = destroy
+    when    = destroy
     command = "echo Instance ${self.id} has been destroyed >> ./status.txt"
   }
 }
