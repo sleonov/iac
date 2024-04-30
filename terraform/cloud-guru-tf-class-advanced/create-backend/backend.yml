@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Encrypted Terraform Backend
+Parameters:
+  Project:
+    Description: "Name of the project"
+    Type: String
+  S3BucketName:
+    Description: "Name of S3 Bucket"
+    Type: String
+  DynamodbTableName:
+    Description: "Name of Dynamodb Table"
+    Type: String
+  KMSAliasName:
+    Description: "KMS Key Alias name"
+    Type: String
+Resources:
+
+  TerraformBackends3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      AccessControl: Private
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: !GetAtt TerraformBackendKMSKey.Arn
+            BucketKeyEnabled: true
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Project
+          Value: !Ref Project
+
+  TerraformBackendKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      EnableKeyRotation: true
+      MultiRegion: true
+      Tags:
+        - Key: Project
+          Value: !Ref Project
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: Allow current account to access KMS
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+
+  TerraformBackendKMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${KMSAliasName}"
+      TargetKeyId: !Ref TerraformBackendKMSKey
+
+  TerraformBackendDynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DynamodbTableName
+      AttributeDefinitions:
+        - AttributeName: LockID
+          AttributeType: S
+      KeySchema:
+        - AttributeName: LockID
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      SSESpecification:
+        SSEType: KMS
+        SSEEnabled: true
+        KMSMasterKeyId: !GetAtt TerraformBackendKMSKey.Arn
+      Tags:
+        - Key: Project
+          Value: !Ref Project
+
+Outputs:
+  S3Bucket:
+    Description: The Terraform Backend S3 Bucket
+    Value: !Ref TerraformBackends3Bucket
+  DynamoDBTable:
+    Description: The Terraform Backend DynamoDB Table for handling locking
+    Value: !Ref TerraformBackendDynamoDBTable
