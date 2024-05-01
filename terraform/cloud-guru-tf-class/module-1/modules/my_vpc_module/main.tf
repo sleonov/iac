@@ -1,6 +1,9 @@
-provider "aws" {
-  region  = var.region
-  profile = "sleonov-green"
+terraform {
+  required_providers {
+    aws = {
+      source = "hashicorp/aws"
+    }
+  }
 }
 
 resource "aws_vpc" "vpc_cidr" {
