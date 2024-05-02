@@ -1,0 +1,2 @@
+- RDS deployed with aws provider.
+- Mysql is then managed with mysql provider.
