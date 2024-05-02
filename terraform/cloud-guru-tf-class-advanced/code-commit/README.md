@@ -7,9 +7,9 @@
 - After repo created:
   - generate HTTP credentials (user/password for AWS user)
 
-### Add and commit code in ```git/my-repo-1```
+### Add and commit code in ```git-repo/my-repo-1```
  - clone my-repo-1
-   - ```cd git```
+   - ```cd git-repo```
    - git clone https://git-codecommit.us-east-1.amazonaws.com/v1/repos/my-repo-1
  - Add terraform code to newly cloned repo:
      - scripts (user data)
@@ -23,7 +23,7 @@
 - verify role creation / codebuild project creation
 - Manually update codebuild project to use branch/main in source (bug)
 
-### Go to ```git/my-repo-1``` and add build spec
+### Go to ```git-repo/my-repo-1``` and add build spec
 - Add buildspec.yml
 - commit
 
@@ -36,6 +36,6 @@
 - run terraform apply
 - verify pipleline, S3 buckets creation
 
-### ## Go to ```git/my-repo-1``` and modify instance
+### ## Go to ```git-repo/my-repo-1``` and modify instance
 - add tag to web instance, push to main branch
 - it should trigger pipeline build
