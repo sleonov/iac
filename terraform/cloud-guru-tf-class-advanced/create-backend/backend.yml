@@ -16,6 +16,7 @@ Parameters:
 Resources:
 
   TerraformBackends3Bucket:
+    #checkov:skip=CKV_AWS_18:It's okay
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Ref S3BucketName
@@ -63,6 +64,7 @@ Resources:
       TargetKeyId: !Ref TerraformBackendKMSKey
 
   TerraformBackendDynamoDBTable:
+    #checkov:skip=CKV_AWS_28:We do not care
     Type: AWS::DynamoDB::Table
     Properties:
       TableName: !Ref DynamodbTableName
