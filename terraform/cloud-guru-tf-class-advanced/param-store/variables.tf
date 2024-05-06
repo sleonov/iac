@@ -1,9 +1,9 @@
 variable "path_to_password" {
-  type = string
+  type    = string
   default = "/mysql/admin/password"
 }
 
 variable "password_length" {
-  type = number
+  type    = number
   default = 20
 }

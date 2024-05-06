@@ -1,6 +1,6 @@
-resource aws_ssm_parameter "admin_password" {
-  name = var.path_to_password
-  type = "SecureString"
+resource "aws_ssm_parameter" "admin_password" {
+  name  = var.path_to_password
+  type  = "SecureString"
   value = data.aws_secretsmanager_random_password.this.random_password
 }
 
