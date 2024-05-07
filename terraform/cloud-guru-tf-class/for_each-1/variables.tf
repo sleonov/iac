@@ -1,3 +1,7 @@
+variable "project_id" {
+  type    = string
+  default = "instance-in-each-app-subnet"
+}
 variable "subnets_name_pattern" {
   type    = string
   default = "application"

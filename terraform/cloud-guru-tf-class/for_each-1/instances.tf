@@ -21,4 +21,7 @@ resource "aws_instance" "instances" {
   ami           = var.instance_ami
   subnet_id     = each.value
   instance_type = "t2.micro"
+  tags = {
+    "Name" = "instance-${index(data.aws_subnets.available_app_subnets.ids, each.value)}"
+  }
 }
