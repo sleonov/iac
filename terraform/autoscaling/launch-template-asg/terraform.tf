@@ -11,7 +11,8 @@ provider "aws" {
   profile = "sleonov-green"
   default_tags {
     tags = {
-      "tag:project" : var.project_id
+      Environment = "Test"
+      ProjectId   = var.project_id
     }
   }
 }

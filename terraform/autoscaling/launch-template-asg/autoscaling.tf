@@ -45,6 +45,7 @@ resource "aws_launch_template" "template" {
     resource_type = "instance"
     tags = {
       "Purpose" = "Instance for ${var.project_id}"
+      "Name"    = "Autoscaling"
     }
   }
   tags = {
@@ -64,10 +65,10 @@ resource "aws_autoscaling_group" "asg" {
 }
 
 resource "aws_autoscaling_policy" "target_tracking" {
+  name                   = "target-tracking-1"
   autoscaling_group_name = aws_autoscaling_group.asg.name
   cooldown               = 0
   enabled                = true
-  name                   = "target-tracking-1"
   policy_type            = "TargetTrackingScaling"
   scaling_adjustment     = 0
   target_tracking_configuration {
@@ -77,4 +78,14 @@ resource "aws_autoscaling_policy" "target_tracking" {
       predefined_metric_type = "ASGAverageCPUUtilization"
     }
   }
+}
+
+resource "aws_autoscaling_schedule" "schedule_1" {
+  scheduled_action_name  = "shrink"
+  min_size               = 0
+  max_size               = 1
+  desired_capacity       = 0
+  start_time             = "2025-12-11T18:00:00Z"
+  end_time               = "2025-12-12T06:00:00Z"
+  autoscaling_group_name = aws_autoscaling_group.asg.name
 }
