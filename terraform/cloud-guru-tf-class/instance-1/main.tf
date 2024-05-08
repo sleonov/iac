@@ -16,13 +16,13 @@ resource "aws_instance" "my_instance" {
   instance_type = var.my_instance_type
   subnet_id     = var.my_instance_subnet
   tags = {
-    "Name" = "Howdy"
+    "Name" = "Howdy from ${terraform.workspace}"
   }
   provisioner "local-exec" {
-    command = "echo Instance ${self.id} has been provisioned >> ./status.txt"
+    command = "echo ${terraform.workspace} workspace: instance ${self.id} has been provisioned >> ./status.txt"
   }
   provisioner "local-exec" {
     when    = destroy
-    command = "echo Instance ${self.id} has been destroyed >> ./status.txt"
+    command = "echo ${terraform.workspace} workspace: instance ${self.id} has been destroyed >> ./status.txt"
   }
 }
