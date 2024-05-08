@@ -27,7 +27,16 @@ resource "aws_launch_template" "template" {
   description   = "My Launch Template"
   image_id      = var.instance_ami
   instance_type = "t2.micro"
-  user_data     = filebase64("./scripts/user_data_web.sh")
+  iam_instance_profile {
+    name = "ec2-ssm-instance-profile"
+  }
+  instance_market_options {
+    market_type = "spot"
+    spot_options {
+      spot_instance_type = "one-time"
+    }
+  }
+  user_data = filebase64("./scripts/user_data_web.sh")
   network_interfaces {
     associate_public_ip_address = true
     security_groups             = data.aws_security_groups.instance_sgs.ids
@@ -54,12 +63,18 @@ resource "aws_autoscaling_group" "asg" {
   }
 }
 
-# Incomplete
-resource "aws_autoscaling_policy" "dynamic_simple" {
+resource "aws_autoscaling_policy" "target_tracking" {
   autoscaling_group_name = aws_autoscaling_group.asg.name
-  policy_type            = "SimpleScaling"
-  metric_aggregation_type = "Average"
-  name = "asg_simple_1"
-  adjustment_type = "ExactCapacity"
-  scaling_adjustment = 1
+  cooldown               = 0
+  enabled                = true
+  name                   = "target-tracking-1"
+  policy_type            = "TargetTrackingScaling"
+  scaling_adjustment     = 0
+  target_tracking_configuration {
+    disable_scale_in = false
+    target_value     = 50
+    predefined_metric_specification {
+      predefined_metric_type = "ASGAverageCPUUtilization"
+    }
+  }
 }

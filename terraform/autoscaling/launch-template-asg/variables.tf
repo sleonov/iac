@@ -17,6 +17,11 @@ variable "instance_ami" {
   default = "ami-051f8a213df8bc089"
 }
 
+variable "instance_profile" {
+  type    = string
+  default = "ec2-ssm-instance-profile"
+}
+
 variable "sg_names" {
   type    = list(string)
   default = ["http-https", "inbound-ssh"]
