@@ -18,19 +18,19 @@ data "aws_subnets" "available_app_subnets" {
 
 data "aws_security_groups" "instance_sgs" {
   filter {
-    name = "group-name"
+    name   = "group-name"
     values = var.sg_names
   }
 }
 
 resource "aws_launch_template" "template" {
-  description = "My Launch Template"
-  image_id = var.instance_ami
+  description   = "My Launch Template"
+  image_id      = var.instance_ami
   instance_type = "t2.micro"
-  user_data = filebase64("./scripts/user_data_web.sh")
+  user_data     = filebase64("./scripts/user_data_web.sh")
   network_interfaces {
     associate_public_ip_address = true
-    security_groups = data.aws_security_groups.instance_sgs.ids
+    security_groups             = data.aws_security_groups.instance_sgs.ids
   }
   tag_specifications {
     resource_type = "instance"
@@ -52,4 +52,14 @@ resource "aws_autoscaling_group" "asg" {
     id      = aws_launch_template.template.id
     version = "$Latest"
   }
+}
+
+# Incomplete
+resource "aws_autoscaling_policy" "dynamic_simple" {
+  autoscaling_group_name = aws_autoscaling_group.asg.name
+  policy_type            = "SimpleScaling"
+  metric_aggregation_type = "Average"
+  name = "asg_simple_1"
+  adjustment_type = "ExactCapacity"
+  scaling_adjustment = 1
 }
