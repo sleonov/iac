@@ -34,10 +34,15 @@ variable "asg_min_size" {
 
 variable "asg_max_size" {
   type    = number
-  default = 3
+  default = 4
 }
 
 variable "asg_desired_size" {
+  type    = number
+  default = 2
+}
+
+variable "warm_pool_min_size" {
   type    = number
   default = 2
 }
