@@ -16,7 +16,7 @@ resource "aws_lb" "lb" {
   load_balancer_type         = "application"
   security_groups            = data.aws_security_groups.instance_sgs.ids
   subnets                    = data.aws_subnets.available_app_subnets.ids
-  enable_deletion_protection = true
+  enable_deletion_protection = false
 }
 
 resource "aws_lb_listener" "listener" {
