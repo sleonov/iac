@@ -1,28 +1,3 @@
-data "aws_vpc" "available_vpc" {
-  filter {
-    name   = "tag:Name"
-    values = [var.vpc_name]
-  }
-}
-
-data "aws_subnets" "available_app_subnets" {
-  filter {
-    name   = "tag:Name"
-    values = ["*${var.subnets_name_pattern}*"]
-  }
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.available_vpc.id]
-  }
-}
-
-data "aws_security_groups" "instance_sgs" {
-  filter {
-    name   = "group-name"
-    values = var.sg_names
-  }
-}
-
 resource "aws_launch_template" "template" {
   description   = "My Launch Template"
   image_id      = var.instance_ami
@@ -30,13 +5,6 @@ resource "aws_launch_template" "template" {
   iam_instance_profile {
     name = "ec2-ssm-instance-profile"
   }
-  # Spot instances cannot be used with ASG warm pool
-  #instance_market_options {
-  #  market_type = "spot"
-  #  spot_options {
-  #    spot_instance_type = "one-time"
-  #  }
-  #}
   user_data = filebase64("./scripts/user_data_web.sh")
   network_interfaces {
     associate_public_ip_address = true
@@ -68,6 +36,7 @@ resource "aws_autoscaling_group" "asg" {
     id      = aws_launch_template.template.id
     version = "$Latest"
   }
+  target_group_arns = [aws_lb_target_group.tg.id]
 }
 
 resource "aws_autoscaling_policy" "target_tracking" {

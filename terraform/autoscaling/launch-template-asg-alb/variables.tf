@@ -2,6 +2,17 @@ variable "project_id" {
   type    = string
   default = "Auto-scaling-group excercise"
 }
+
+variable "dns_domain" {
+  type    = string
+  default = "unixlabs.us"
+}
+
+variable "dns_short_name" {
+  type    = string
+  default = "my-lb-1"
+}
+
 variable "subnets_name_pattern" {
   type    = string
   default = "application"
