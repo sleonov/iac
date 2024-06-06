@@ -16,13 +16,6 @@ data "aws_subnets" "available_app_subnets" {
   }
 }
 
-data "aws_security_groups" "instance_sgs" {
-  filter {
-    name   = "group-name"
-    values = var.sg_names
-  }
-}
-
 data "aws_route53_zone" "hz" {
   name = var.dns_domain
 }
