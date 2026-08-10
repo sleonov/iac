@@ -7,6 +7,7 @@
 
 ## Table of Contents
 
+- [Provider](#provider)
 - [Remote State](#remote-state)
 - [New Module Bootstrap](#new-module-bootstrap)
 - [01-bootstrap](#01-bootstrap)
@@ -18,6 +19,14 @@
   - [Network Resources Diagram](#network-resources-diagram)
 - [03-iam](#03-iam)
   - [bastion](#bastion)
+
+## Provider
+
+All modules use the [AWS Terraform provider](https://registry.terraform.io/providers/hashicorp/aws/latest) (`hashicorp/aws`). The provider translates Terraform resource definitions into AWS API calls, managing the full lifecycle of AWS resources (create, read, update, delete).
+
+- [Registry page](https://registry.terraform.io/providers/hashicorp/aws/latest)
+- [Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+- [GitHub](https://github.com/hashicorp/terraform-provider-aws)
 
 ## Remote State
 
@@ -40,6 +49,8 @@ Copy files from `module_skel/` into the new module directory and replace the `<m
 
 Native S3 state locking via `use_lockfile = true` — no DynamoDB table required.
 
+**Resource types:** [aws_s3_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket), [aws_s3_bucket_versioning](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_versioning), [aws_s3_bucket_server_side_encryption_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_server_side_encryption_configuration), [aws_s3_bucket_public_access_block](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block)
+
 **Resources:**
 - `aws_s3_bucket` — state bucket
 - `aws_s3_bucket_versioning` — versioning enabled
@@ -56,6 +67,8 @@ Creates resources in east and west regions for core networking infrastructure.
 
 ### core-vpcs
 
+**Resource types:** [aws_vpc](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc)
+
 **Resources:**
 - `aws_vpc.east` — east VPC (`us-east-1`) with DNS support enabled
 - `aws_vpc.west` — west VPC (`us-west-1`) with DNS support enabled
@@ -67,6 +80,8 @@ Creates resources in east and west regions for core networking infrastructure.
 ### core-subnets
 
 VPC CIDRs are retrieved from `core-vpcs` remote state. Subnet CIDRs are derived dynamically from those using `cidrsubnet()` — see [docs](https://developer.hashicorp.com/terraform/language/functions/cidrsubnet). AZs are resolved at runtime using `aws_availability_zones` filtered by `zone-type = availability-zone` to exclude Local Zones and Wavelength Zones.
+
+**Resource types:** [aws_subnet](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/subnet)
 
 **Resources:**
 - `aws_subnet.east_private_a`, `aws_subnet.east_private_b` — east private subnets
@@ -85,6 +100,8 @@ VPC CIDRs are retrieved from `core-vpcs` remote state. Subnet CIDRs are derived 
 VPC peering between east (`us-east-1`) and west (`us-west-1`) regions. Private subnets have local routing only (no NAT). DB subnets are fully isolated — local routing only, no IGW or peering routes.
 
 Route tables are defined in `route_tables.tf`. Routes are added separately as `aws_route` resources in `igw.tf` and `vpc_peering.tf`.
+
+**Resource types:** [aws_internet_gateway](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/internet_gateway), [aws_route_table](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table), [aws_route_table_association](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association), [aws_route](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route), [aws_vpc_peering_connection](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_peering_connection), [aws_vpc_peering_connection_accepter](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_peering_connection_accepter)
 
 | Route table | Routes |
 |---|---|
@@ -110,6 +127,8 @@ Route tables are defined in `route_tables.tf`. Routes are added separately as `a
 ### core-security-groups
 
 VPC IDs are retrieved from `core-vpcs` remote state. SSH ingress is restricted to `bastion_allowed_cidr` — set this to your public IP in `terraform.tfvars`.
+
+**Resource types:** [aws_security_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group), [aws_vpc_security_group_ingress_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_ingress_rule), [aws_vpc_security_group_egress_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_security_group_egress_rule)
 
 **Resources:**
 - `aws_security_group.bastion_east`, `aws_security_group.bastion_west` — bastion host security groups
@@ -178,6 +197,8 @@ IAM resources shared across modules. Each sub-module groups roles and instance p
 ### bastion
 
 Instance profile for bastion EC2 instances. Grants SSM Session Manager access (connect without SSH) and CloudWatch Logs access (ship system logs). No S3, KMS, or other permissions.
+
+**Resource types:** [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role), [aws_iam_role_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment), [aws_iam_instance_profile](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_instance_profile)
 
 **Resources:**
 - `aws_iam_role.bastion` — EC2 trust policy
