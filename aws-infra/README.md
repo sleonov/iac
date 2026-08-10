@@ -1,5 +1,24 @@
 ## AWS infra setup
 
+## Shared Configuration
+
+| Parameter      | Value                          |
+|----------------|-------------------------------|
+| State bucket   | `terraform-state-607527010331` |
+| AWS region     | `us-east-1`                   |
+| AWS profile    | `sleonov`                     |
+| Account ID     | `607527010331`                 |
+
+### Remote state key convention
+
+Each module stores its state at `aws-infra/<module-name>/terraform.tfstate`:
+
+| Module          | State key                                    |
+|-----------------|----------------------------------------------|
+| 01-bootstrap    | local only (creates the bucket)              |
+| 02-networking   | `aws-infra/02-networking/terraform.tfstate`  |
+| 03-vault        | `aws-infra/03-vault/terraform.tfstate`       |
+
 ## Table of Contents
 
 - [01-bootstrap](#01-bootstrap)
