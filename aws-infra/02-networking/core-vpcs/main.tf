@@ -4,6 +4,7 @@ resource "aws_vpc" "east" {
   enable_dns_hostnames = true
   enable_dns_support   = true
   tags = {
+    Name         = "vpc-east-compute"
     vpc-function = "compute"
   }
 }
@@ -14,6 +15,7 @@ resource "aws_vpc" "west" {
   enable_dns_hostnames = true
   enable_dns_support   = true
   tags = {
+    Name         = "vpc-west-compute"
     vpc-function = "compute"
   }
 }
