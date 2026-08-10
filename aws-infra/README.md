@@ -14,7 +14,7 @@
   - [core-vpcs](#core-vpcs)
   - [core-subnets](#core-subnets)
   - [core-routing](#core-routing)
-- [Resources Diagram](#resources-diagram)
+  - [Network Resources Diagram](#network-resources-diagram)
 
 ## Remote State
 
@@ -66,36 +66,52 @@ VPC CIDRs are retrieved from `core-vpcs` remote state. Subnet CIDRs are derived 
 **Resources:**
 - `aws_subnet.east_private_a`, `aws_subnet.east_private_b` — east private subnets
 - `aws_subnet.east_public_a`, `aws_subnet.east_public_b` — east public subnets
+- `aws_subnet.east_db_a`, `aws_subnet.east_db_b` — east database subnets
 - `aws_subnet.west_private_a`, `aws_subnet.west_private_b` — west private subnets
 - `aws_subnet.west_public_a`, `aws_subnet.west_public_b` — west public subnets
+- `aws_subnet.west_db_a`, `aws_subnet.west_db_b` — west database subnets
 
 **Outputs:**
-- `east_private_subnets`, `east_public_subnets` — east subnet maps (id, cidr, az, vpc_id per subnet)
-- `west_private_subnets`, `west_public_subnets` — west subnet maps (id, cidr, az, vpc_id per subnet)
+- `east_private_subnets`, `east_public_subnets`, `east_db_subnets` — east subnet maps (id, cidr, az, vpc_id per subnet)
+- `west_private_subnets`, `west_public_subnets`, `west_db_subnets` — west subnet maps (id, cidr, az, vpc_id per subnet)
 
 ### core-routing
 
-VPC peering between east (`us-east-1`) and west (`us-west-1`) regions. Routes added to all public and private route tables. Private subnets have local routing only (no NAT).
+VPC peering between east (`us-east-1`) and west (`us-west-1`) regions. Private subnets have local routing only (no NAT). DB subnets are fully isolated — local routing only, no IGW or peering routes.
+
+Route tables are defined in `route_tables.tf`. Routes are added separately as `aws_route` resources in `igw.tf` and `vpc_peering.tf`.
+
+| Route table | Routes |
+|---|---|
+| `rt-east-public` | `0.0.0.0/0 → igw-east`, `10.10.0.0/16 → pcx` |
+| `rt-east-private` | `10.10.0.0/16 → pcx` |
+| `rt-east-db` | local only |
+| `rt-west-public` | `0.0.0.0/0 → igw-west`, `10.1.0.0/16 → pcx` |
+| `rt-west-private` | `10.1.0.0/16 → pcx` |
+| `rt-west-db` | local only |
 
 **Resources:**
 - `aws_internet_gateway.east`, `aws_internet_gateway.west` — internet gateways attached to each VPC
-- `aws_route_table.east_public`, `aws_route_table.east_private` — east route tables with subnet associations
-- `aws_route_table.west_public`, `aws_route_table.west_private` — west route tables with subnet associations
+- `aws_route_table.east_public`, `aws_route_table.east_private`, `aws_route_table.east_db` — east route tables with subnet associations
+- `aws_route_table.west_public`, `aws_route_table.west_private`, `aws_route_table.west_db` — west route tables with subnet associations
 - `aws_vpc_peering_connection.east_to_west` — cross-region VPC peering connection
 
 **Outputs:**
 - `east_igw_id`, `west_igw_id` — internet gateway IDs
-- `east_public_route_table_id`, `east_private_route_table_id` — east route table IDs
-- `west_public_route_table_id`, `west_private_route_table_id` — west route table IDs
+- `east_public_route_table_id`, `east_private_route_table_id`, `east_db_route_table_id` — east route table IDs
+- `west_public_route_table_id`, `west_private_route_table_id`, `west_db_route_table_id` — west route table IDs
 - `vpc_peering_connection_id` — VPC peering connection ID
 
-## Resources Diagram
+### Network Resources Diagram
+
+Shows the combined resources of `core-vpcs`, `core-subnets`, and `core-routing`.
 
 ```mermaid
 graph TD
     INET((Internet))
 
     subgraph east["us-east-1"]
+
         IGW_E[igw-east-compute]
         VPC_E["vpc-east-compute · 10.1.0.0/16"]
         RT_E_PUB[rt-east-public]
@@ -104,11 +120,12 @@ graph TD
         PUB_E_B["east-public-b · 10.1.1.0/24"]
         PRI_E_A["east-private-a · 10.1.10.0/24"]
         PRI_E_B["east-private-b · 10.1.11.0/24"]
+        DB_E_A["east-db-a · 10.1.20.0/24"]
+        DB_E_B["east-db-b · 10.1.21.0/24"]
     end
 
-    PCX[pcx-east-to-west]
-
     subgraph west["us-west-1"]
+
         IGW_W[igw-west-compute]
         VPC_W["vpc-west-compute · 10.10.0.0/16"]
         RT_W_PUB[rt-west-public]
@@ -117,7 +134,11 @@ graph TD
         PUB_W_B["west-public-b · 10.10.1.0/24"]
         PRI_W_A["west-private-a · 10.10.10.0/24"]
         PRI_W_B["west-private-b · 10.10.11.0/24"]
+        DB_W_A["west-db-a · 10.10.20.0/24"]
+        DB_W_B["west-db-b · 10.10.21.0/24"]
     end
+
+    PCX[pcx-east-to-west]
 
     INET --> IGW_E & IGW_W
     IGW_E --- VPC_E
@@ -126,7 +147,9 @@ graph TD
     VPC_W --- RT_W_PUB & RT_W_PRI
     RT_E_PUB --> PUB_E_A & PUB_E_B
     RT_E_PRI --> PRI_E_A & PRI_E_B
+    VPC_E --- DB_E_A & DB_E_B
     RT_W_PUB --> PUB_W_A & PUB_W_B
     RT_W_PRI --> PRI_W_A & PRI_W_B
+    VPC_W --- DB_W_A & DB_W_B
     VPC_E --- PCX --- VPC_W
 ```

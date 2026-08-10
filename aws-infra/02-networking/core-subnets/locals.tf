@@ -15,9 +15,13 @@ locals {
   east_public_az_b_cidr  = cidrsubnet(local.east_vpc_cidr, 8, 1)  # 10.1.1.0/24
   east_private_az_a_cidr = cidrsubnet(local.east_vpc_cidr, 8, 10) # 10.1.10.0/24
   east_private_az_b_cidr = cidrsubnet(local.east_vpc_cidr, 8, 11) # 10.1.11.0/24
+  east_db_az_a_cidr      = cidrsubnet(local.east_vpc_cidr, 8, 20) # 10.1.20.0/24
+  east_db_az_b_cidr      = cidrsubnet(local.east_vpc_cidr, 8, 21) # 10.1.21.0/24
 
   west_public_az_a_cidr  = cidrsubnet(local.west_vpc_cidr, 8, 0)  # 10.10.0.0/24
   west_public_az_b_cidr  = cidrsubnet(local.west_vpc_cidr, 8, 1)  # 10.10.1.0/24
   west_private_az_a_cidr = cidrsubnet(local.west_vpc_cidr, 8, 10) # 10.10.10.0/24
   west_private_az_b_cidr = cidrsubnet(local.west_vpc_cidr, 8, 11) # 10.10.11.0/24
+  west_db_az_a_cidr      = cidrsubnet(local.west_vpc_cidr, 8, 20) # 10.10.20.0/24
+  west_db_az_b_cidr      = cidrsubnet(local.west_vpc_cidr, 8, 21) # 10.10.21.0/24
 }

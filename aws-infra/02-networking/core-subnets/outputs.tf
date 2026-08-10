@@ -32,6 +32,23 @@ output "east_public_subnets" {
   }
 }
 
+output "east_db_subnets" {
+  value = {
+    az_a = {
+      id     = aws_subnet.east_db_a.id
+      az     = aws_subnet.east_db_a.availability_zone
+      cidr   = aws_subnet.east_db_a.cidr_block
+      vpc_id = aws_subnet.east_db_a.vpc_id
+    }
+    az_b = {
+      id     = aws_subnet.east_db_b.id
+      az     = aws_subnet.east_db_b.availability_zone
+      cidr   = aws_subnet.east_db_b.cidr_block
+      vpc_id = aws_subnet.east_db_b.vpc_id
+    }
+  }
+}
+
 output "west_private_subnets" {
   value = {
     az_a = {
@@ -62,6 +79,23 @@ output "west_public_subnets" {
       az     = aws_subnet.west_public_b.availability_zone
       cidr   = aws_subnet.west_public_b.cidr_block
       vpc_id = aws_subnet.west_public_b.vpc_id
+    }
+  }
+}
+
+output "west_db_subnets" {
+  value = {
+    az_a = {
+      id     = aws_subnet.west_db_a.id
+      az     = aws_subnet.west_db_a.availability_zone
+      cidr   = aws_subnet.west_db_a.cidr_block
+      vpc_id = aws_subnet.west_db_a.vpc_id
+    }
+    az_b = {
+      id     = aws_subnet.west_db_b.id
+      az     = aws_subnet.west_db_b.availability_zone
+      cidr   = aws_subnet.west_db_b.cidr_block
+      vpc_id = aws_subnet.west_db_b.vpc_id
     }
   }
 }
