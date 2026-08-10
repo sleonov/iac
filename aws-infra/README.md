@@ -12,6 +12,7 @@
 - [01-bootstrap](#01-bootstrap)
 - [02-networking](#02-networking)
   - [core-vpcs](#core-vpcs)
+  - [core-subnets](#core-subnets)
 
 ## Remote State
 
@@ -19,7 +20,8 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 
 | Module                  | State key                                             |
 |-------------------------|-------------------------------------------------------|
-| 02-networking/core-vpcs | `aws-infra/02-networking/core-vpcs/terraform.tfstate` |
+| 02-networking/core-vpcs    | `aws-infra/02-networking/core-vpcs/terraform.tfstate`    |
+| 02-networking/core-subnets | `aws-infra/02-networking/core-subnets/terraform.tfstate` |
 | 03-vault                | `aws-infra/03-vault/terraform.tfstate`                |
 
 ## New Module Bootstrap
@@ -53,3 +55,22 @@ Creates resources in east and west regions for core networking infrastructure.
 | `west_vpc_id`   | output   | ID of the west VPC                              |
 | `east_vpc_cidr` | output   | CIDR block of the east VPC                      |
 | `west_vpc_cidr` | output   | CIDR block of the west VPC                      |
+
+### core-subnets
+
+VPC CIDRs are retrieved from `core-vpcs` remote state. Subnet CIDRs are derived dynamically from those using `cidrsubnet()` — see [docs](https://developer.hashicorp.com/terraform/language/functions/cidrsubnet). AZs are resolved at runtime using `aws_availability_zones` filtered by `zone-type = availability-zone` to exclude Local Zones and Wavelength Zones.
+
+| Name                    | Type     | Description                                        |
+|-------------------------|----------|----------------------------------------------------|
+| `aws_subnet.east_private_a` | resource | East private subnet in az-a (`10.1.10.0/24`)   |
+| `aws_subnet.east_private_b` | resource | East private subnet in az-b (`10.1.11.0/24`)   |
+| `aws_subnet.east_public_a`  | resource | East public subnet in az-a (`10.1.0.0/24`)     |
+| `aws_subnet.east_public_b`  | resource | East public subnet in az-b (`10.1.1.0/24`)     |
+| `aws_subnet.west_private_a` | resource | West private subnet in az-a (`10.10.10.0/24`)  |
+| `aws_subnet.west_private_b` | resource | West private subnet in az-b (`10.10.11.0/24`)  |
+| `aws_subnet.west_public_a`  | resource | West public subnet in az-a (`10.10.0.0/24`)    |
+| `aws_subnet.west_public_b`  | resource | West public subnet in az-b (`10.10.1.0/24`)    |
+| `east_private_subnets`      | output   | East private subnets map (id, az, cidr, vpc_id) |
+| `east_public_subnets`       | output   | East public subnets map (id, az, cidr, vpc_id)  |
+| `west_private_subnets`      | output   | West private subnets map (id, az, cidr, vpc_id) |
+| `west_public_subnets`       | output   | West public subnets map (id, az, cidr, vpc_id)  |
