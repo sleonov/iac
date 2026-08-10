@@ -22,6 +22,14 @@ output "west_private_route_table_id" {
   value = aws_route_table.west_private.id
 }
 
+output "east_db_route_table_id" {
+  value = aws_route_table.east_db.id
+}
+
+output "west_db_route_table_id" {
+  value = aws_route_table.west_db.id
+}
+
 output "vpc_peering_connection_id" {
   value = aws_vpc_peering_connection.east_to_west.id
 }
