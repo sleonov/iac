@@ -1,3 +1,6 @@
+# IDE
+.idea/
+
 # Local state files
 *.tfstate
 *.tfstate.backup

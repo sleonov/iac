@@ -8,7 +8,10 @@
 ## Table of Contents
 
 - [Remote State](#remote-state)
+- [New Module Bootstrap](#new-module-bootstrap)
 - [01-bootstrap](#01-bootstrap)
+- [02-networking](#02-networking)
+  - [core-vpcs](#core-vpcs)
 
 ## Remote State
 
@@ -16,72 +19,37 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 
 | Module                  | State key                                             |
 |-------------------------|-------------------------------------------------------|
-| 02-networking/vpc       | `aws-infra/02-networking/vpc/terraform.tfstate`       |
-| 02-networking/subnets   | `aws-infra/02-networking/subnets/terraform.tfstate`   |
+| 02-networking/core-vpcs | `aws-infra/02-networking/core-vpcs/terraform.tfstate` |
 | 03-vault                | `aws-infra/03-vault/terraform.tfstate`                |
+
+## New Module Bootstrap
+
+Copy files from `module_skel/` into the new module directory and replace the `<module-path>` placeholders in `locals.tf` and `terraform.tf` with the module's relative path (e.g. `02-networking/core-vpcs`).
 
 ## 01-bootstrap
 
-**Variables**
+Native S3 state locking via `use_lockfile = true` — no DynamoDB table required.
 
-| Variable             | Default             | Description                        |
-|----------------------|---------------------|------------------------------------|
-| `region`             | `us-east-1`         | AWS region                         |
-| `bucket_name_prefix` | `terraform-state`   | Prefix for the state bucket name   |
+| Name                                                 | Type     | Description                                            |
+|------------------------------------------------------|----------|--------------------------------------------------------|
+| `aws_s3_bucket.terraform_state`                                      | resource | State bucket named `<bucket_name_prefix>-<account-id>` |
+| `aws_s3_bucket_versioning.terraform_state`                           | resource | Versioning enabled                                     |
+| `aws_s3_bucket_server_side_encryption_configuration.terraform_state` | resource | AES256 encryption                                      |
+| `aws_s3_bucket_public_access_block.terraform_state`                  | resource | All public access blocked                              |
+| `state_bucket_name`                                  | output   | Name of the S3 bucket                                  |
+| `state_bucket_arn`                                   | output   | ARN of the S3 bucket                                   |
 
-**Resources**
+## 02-networking
 
-| Resource                                      | Description                                             |
-|-----------------------------------------------|---------------------------------------------------------|
-| `aws_s3_bucket`                               | State bucket named `<bucket_name_prefix>-<account-id>` |
-| `aws_s3_bucket_versioning`                    | Enables versioning on the state bucket                  |
-| `aws_s3_bucket_server_side_encryption_configuration` | AES256 encryption                              |
-| `aws_s3_bucket_public_access_block`           | Blocks all public access                                |
+Creates resources in east and west regions for core networking infrastructure.
 
-Native S3 state locking is enabled via `use_lockfile = true` — no DynamoDB table required.
+### core-vpcs
 
-**Outputs**
-
-| Output                | Description              |
-|-----------------------|--------------------------|
-| `state_bucket_name`   | Name of the S3 bucket    |
-| `state_bucket_arn`    | ARN of the S3 bucket     |
-
-**`locals.tf` template** — set `module_name` to the full relative path of the module:
-
-```hcl
-locals {
-  module_name = "<module-path>"  # e.g. "02-networking/vpc"
-}
-```
-
-**`providers.tf` template** — use this in every module:
-
-```hcl
-provider "aws" {
-  region = var.region
-
-  default_tags {
-    tags = {
-      project    = "aws-infra"
-      managed-by = "terraform"
-      owner      = "unixovich"
-      module     = local.module_name
-    }
-  }
-}
-```
-
-**Backend template** — add this to `terraform.tf`, replacing `key` with the module-specific path:
-
-```hcl
-terraform {
-  backend "s3" {
-    bucket       = "terraform-state-<account-id>"
-    key          = "<module-name>/terraform.tfstate"
-    region       = "us-east-1"
-    use_lockfile = true
-    encrypt      = true
-  }
-}
-```
+| Name            | Type     | Description                                     |
+|-----------------|----------|-------------------------------------------------|
+| `aws_vpc.east`  | resource | East VPC (`us-east-1`) with DNS support enabled |
+| `aws_vpc.west`  | resource | West VPC (`us-west-1`) with DNS support enabled |
+| `east_vpc_id`   | output   | ID of the east VPC                              |
+| `west_vpc_id`   | output   | ID of the west VPC                              |
+| `east_vpc_cidr` | output   | CIDR block of the east VPC                      |
+| `west_vpc_cidr` | output   | CIDR block of the west VPC                      |
