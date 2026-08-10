@@ -13,6 +13,7 @@
 - [02-networking](#02-networking)
   - [core-vpcs](#core-vpcs)
   - [core-subnets](#core-subnets)
+  - [core-routing](#core-routing)
 
 ## Remote State
 
@@ -21,8 +22,9 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 | Module                  | State key                                             |
 |-------------------------|-------------------------------------------------------|
 | 02-networking/core-vpcs    | `aws-infra/02-networking/core-vpcs/terraform.tfstate`    |
-| 02-networking/core-subnets | `aws-infra/02-networking/core-subnets/terraform.tfstate` |
-| 03-vault                | `aws-infra/03-vault/terraform.tfstate`                |
+| 02-networking/core-subnets  | `aws-infra/02-networking/core-subnets/terraform.tfstate`  |
+| 02-networking/core-routing  | `aws-infra/02-networking/core-routing/terraform.tfstate`  |
+| 03-vault                    | `aws-infra/03-vault/terraform.tfstate`                    |
 
 ## New Module Bootstrap
 
@@ -74,3 +76,24 @@ VPC CIDRs are retrieved from `core-vpcs` remote state. Subnet CIDRs are derived 
 | `east_public_subnets`       | output   | East public subnets map (id, az, cidr, vpc_id)  |
 | `west_private_subnets`      | output   | West private subnets map (id, az, cidr, vpc_id) |
 | `west_public_subnets`       | output   | West public subnets map (id, az, cidr, vpc_id)  |
+
+### core-routing
+
+VPC peering between east (`us-east-1`) and west (`us-west-1`) regions. Routes added to all public and private route tables. Private subnets have local routing only (no NAT).
+
+| Name                           | Type     | Description                                          |
+|--------------------------------|----------|------------------------------------------------------|
+| `aws_internet_gateway.east`    | resource | IGW attached to east VPC                             |
+| `aws_internet_gateway.west`    | resource | IGW attached to west VPC                             |
+| `aws_route_table.east_public`  | resource | East public route table (`0.0.0.0/0` → IGW)         |
+| `aws_route_table.east_private` | resource | East private route table (local only)                |
+| `aws_route_table.west_public`  | resource | West public route table (`0.0.0.0/0` → IGW)         |
+| `aws_route_table.west_private` | resource | West private route table (local only)                |
+| `aws_vpc_peering_connection`   | resource | VPC peering connection from east to west             |
+| `east_igw_id`                  | output   | ID of the east IGW                                   |
+| `west_igw_id`                  | output   | ID of the west IGW                                   |
+| `east_public_route_table_id`   | output   | ID of the east public route table                    |
+| `east_private_route_table_id`  | output   | ID of the east private route table                   |
+| `west_public_route_table_id`   | output   | ID of the west public route table                    |
+| `west_private_route_table_id`  | output   | ID of the west private route table                   |
+| `vpc_peering_connection_id`    | output   | ID of the VPC peering connection                     |
