@@ -1,9 +1,9 @@
 resource "aws_s3_bucket" "terraform_state" {
-  bucket        = "${var.project}-${data.aws_caller_identity.current.account_id}"
+  bucket        = "${var.bucket_name_prefix}-${data.aws_caller_identity.current.account_id}"
   force_destroy = false
 
   tags = {
-    Name    = "${var.project}-${data.aws_caller_identity.current.account_id}"
+    Name    = "${var.bucket_name_prefix}-${data.aws_caller_identity.current.account_id}"
     Purpose = "Terraform remote state storage"
   }
 }

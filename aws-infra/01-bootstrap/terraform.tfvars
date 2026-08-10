@@ -1,3 +1,2 @@
-region  = "us-east-1"
-profile = "sleonov"
-project = "terraform-state"
+region             = "us-east-1"
+bucket_name_prefix = "terraform-state"

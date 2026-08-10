@@ -3,12 +3,7 @@ variable "region" {
   default = "us-east-1"
 }
 
-variable "profile" {
-  type    = string
-  default = "sleonov"
-}
-
-variable "project" {
+variable "bucket_name_prefix" {
   type    = string
   default = "terraform-state"
 }
