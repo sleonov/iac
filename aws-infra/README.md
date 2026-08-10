@@ -19,9 +19,9 @@
 
 All modules store state in S3 bucket `terraform-state-607527010331`. It is created in `01-bootstrap` step, using local state.
 
-| Module                  | State key                                             |
-|-------------------------|-------------------------------------------------------|
-| 02-networking/core-vpcs    | `aws-infra/02-networking/core-vpcs/terraform.tfstate`    |
+| Module                      | State key                                                 |
+|-----------------------------|-----------------------------------------------------------|
+| 02-networking/core-vpcs     | `aws-infra/02-networking/core-vpcs/terraform.tfstate`     |
 | 02-networking/core-subnets  | `aws-infra/02-networking/core-subnets/terraform.tfstate`  |
 | 02-networking/core-routing  | `aws-infra/02-networking/core-routing/terraform.tfstate`  |
 | 03-vault                    | `aws-infra/03-vault/terraform.tfstate`                    |
@@ -34,14 +34,9 @@ Copy files from `module_skel/` into the new module directory and replace the `<m
 
 Native S3 state locking via `use_lockfile = true` — no DynamoDB table required.
 
-| Name                                                 | Type     | Description                                            |
-|------------------------------------------------------|----------|--------------------------------------------------------|
-| `aws_s3_bucket.terraform_state`                                      | resource | State bucket named `<bucket_name_prefix>-<account-id>` |
-| `aws_s3_bucket_versioning.terraform_state`                           | resource | Versioning enabled                                     |
-| `aws_s3_bucket_server_side_encryption_configuration.terraform_state` | resource | AES256 encryption                                      |
-| `aws_s3_bucket_public_access_block.terraform_state`                  | resource | All public access blocked                              |
-| `state_bucket_name`                                  | output   | Name of the S3 bucket                                  |
-| `state_bucket_arn`                                   | output   | ARN of the S3 bucket                                   |
+**Resources:** `aws_s3_bucket`, `aws_s3_bucket_versioning`, `aws_s3_bucket_server_side_encryption_configuration`, `aws_s3_bucket_public_access_block`
+
+**Outputs:** `state_bucket_name`, `state_bucket_arn`
 
 ## 02-networking
 
@@ -49,51 +44,22 @@ Creates resources in east and west regions for core networking infrastructure.
 
 ### core-vpcs
 
-| Name            | Type     | Description                                     |
-|-----------------|----------|-------------------------------------------------|
-| `aws_vpc.east`  | resource | East VPC (`us-east-1`) with DNS support enabled |
-| `aws_vpc.west`  | resource | West VPC (`us-west-1`) with DNS support enabled |
-| `east_vpc_id`   | output   | ID of the east VPC                              |
-| `west_vpc_id`   | output   | ID of the west VPC                              |
-| `east_vpc_cidr` | output   | CIDR block of the east VPC                      |
-| `west_vpc_cidr` | output   | CIDR block of the west VPC                      |
+**Resources:** `aws_vpc.east`, `aws_vpc.west`
+
+**Outputs:** `east_vpc_id`, `west_vpc_id`, `east_vpc_cidr`, `west_vpc_cidr`
 
 ### core-subnets
 
 VPC CIDRs are retrieved from `core-vpcs` remote state. Subnet CIDRs are derived dynamically from those using `cidrsubnet()` — see [docs](https://developer.hashicorp.com/terraform/language/functions/cidrsubnet). AZs are resolved at runtime using `aws_availability_zones` filtered by `zone-type = availability-zone` to exclude Local Zones and Wavelength Zones.
 
-| Name                    | Type     | Description                                        |
-|-------------------------|----------|----------------------------------------------------|
-| `aws_subnet.east_private_a` | resource | East private subnet in az-a (`10.1.10.0/24`)   |
-| `aws_subnet.east_private_b` | resource | East private subnet in az-b (`10.1.11.0/24`)   |
-| `aws_subnet.east_public_a`  | resource | East public subnet in az-a (`10.1.0.0/24`)     |
-| `aws_subnet.east_public_b`  | resource | East public subnet in az-b (`10.1.1.0/24`)     |
-| `aws_subnet.west_private_a` | resource | West private subnet in az-a (`10.10.10.0/24`)  |
-| `aws_subnet.west_private_b` | resource | West private subnet in az-b (`10.10.11.0/24`)  |
-| `aws_subnet.west_public_a`  | resource | West public subnet in az-a (`10.10.0.0/24`)    |
-| `aws_subnet.west_public_b`  | resource | West public subnet in az-b (`10.10.1.0/24`)    |
-| `east_private_subnets`      | output   | East private subnets map (id, az, cidr, vpc_id) |
-| `east_public_subnets`       | output   | East public subnets map (id, az, cidr, vpc_id)  |
-| `west_private_subnets`      | output   | West private subnets map (id, az, cidr, vpc_id) |
-| `west_public_subnets`       | output   | West public subnets map (id, az, cidr, vpc_id)  |
+**Resources:** `aws_subnet.east_private_a`, `aws_subnet.east_private_b`, `aws_subnet.east_public_a`, `aws_subnet.east_public_b`, `aws_subnet.west_private_a`, `aws_subnet.west_private_b`, `aws_subnet.west_public_a`, `aws_subnet.west_public_b`
+
+**Outputs:** `east_private_subnets`, `east_public_subnets`, `west_private_subnets`, `west_public_subnets`
 
 ### core-routing
 
 VPC peering between east (`us-east-1`) and west (`us-west-1`) regions. Routes added to all public and private route tables. Private subnets have local routing only (no NAT).
 
-| Name                           | Type     | Description                                          |
-|--------------------------------|----------|------------------------------------------------------|
-| `aws_internet_gateway.east`    | resource | IGW attached to east VPC                             |
-| `aws_internet_gateway.west`    | resource | IGW attached to west VPC                             |
-| `aws_route_table.east_public`  | resource | East public route table (`0.0.0.0/0` → IGW)         |
-| `aws_route_table.east_private` | resource | East private route table (local only)                |
-| `aws_route_table.west_public`  | resource | West public route table (`0.0.0.0/0` → IGW)         |
-| `aws_route_table.west_private` | resource | West private route table (local only)                |
-| `aws_vpc_peering_connection`   | resource | VPC peering connection from east to west             |
-| `east_igw_id`                  | output   | ID of the east IGW                                   |
-| `west_igw_id`                  | output   | ID of the west IGW                                   |
-| `east_public_route_table_id`   | output   | ID of the east public route table                    |
-| `east_private_route_table_id`  | output   | ID of the east private route table                   |
-| `west_public_route_table_id`   | output   | ID of the west public route table                    |
-| `west_private_route_table_id`  | output   | ID of the west private route table                   |
-| `vpc_peering_connection_id`    | output   | ID of the VPC peering connection                     |
+**Resources:** `aws_internet_gateway.east`, `aws_internet_gateway.west`, `aws_route_table.east_public`, `aws_route_table.east_private`, `aws_route_table.west_public`, `aws_route_table.west_private`, `aws_vpc_peering_connection.east_to_west`
+
+**Outputs:** `east_igw_id`, `west_igw_id`, `east_public_route_table_id`, `east_private_route_table_id`, `west_public_route_table_id`, `west_private_route_table_id`, `vpc_peering_connection_id`
