@@ -16,6 +16,8 @@
   - [core-routing](#core-routing)
   - [core-security-groups](#core-security-groups)
   - [Network Resources Diagram](#network-resources-diagram)
+- [03-iam](#03-iam)
+  - [bastion](#bastion)
 
 ## Remote State
 
@@ -27,6 +29,7 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 | 02-networking/core-subnets  | `aws-infra/02-networking/core-subnets/terraform.tfstate`  |
 | 02-networking/core-routing          | `aws-infra/02-networking/core-routing/terraform.tfstate`          |
 | 02-networking/core-security-groups  | `aws-infra/02-networking/core-security-groups/terraform.tfstate`  |
+| 03-iam/bastion                      | `aws-infra/03-iam/bastion/terraform.tfstate`                      |
 | 03-vault                            | `aws-infra/03-vault/terraform.tfstate`                            |
 
 ## New Module Bootstrap
@@ -167,3 +170,21 @@ graph TD
     VPC_W --- DB_W_A & DB_W_B
     VPC_E --- PCX --- VPC_W
 ```
+
+## 03-iam
+
+IAM resources shared across modules. Each sub-module groups roles and instance profiles by workload.
+
+### bastion
+
+Instance profile for bastion EC2 instances. Grants SSM Session Manager access (connect without SSH) and CloudWatch Logs access (ship system logs). No S3, KMS, or other permissions.
+
+**Resources:**
+- `aws_iam_role.bastion` — EC2 trust policy
+- `aws_iam_role_policy_attachment.bastion_ssm` — SSM Session Manager access
+- `aws_iam_role_policy_attachment.bastion_cloudwatch` — CloudWatch Logs access
+- `aws_iam_instance_profile.bastion` — instance profile attached to bastion EC2 instances
+
+**Outputs:**
+- `bastion_instance_profile_name` — instance profile name
+- `bastion_instance_profile_arn` — instance profile ARN
