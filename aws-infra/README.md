@@ -14,6 +14,7 @@
   - [core-vpcs](#core-vpcs)
   - [core-subnets](#core-subnets)
   - [core-routing](#core-routing)
+  - [core-security-groups](#core-security-groups)
   - [Network Resources Diagram](#network-resources-diagram)
 
 ## Remote State
@@ -24,8 +25,9 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 |-----------------------------|-----------------------------------------------------------|
 | 02-networking/core-vpcs     | `aws-infra/02-networking/core-vpcs/terraform.tfstate`     |
 | 02-networking/core-subnets  | `aws-infra/02-networking/core-subnets/terraform.tfstate`  |
-| 02-networking/core-routing  | `aws-infra/02-networking/core-routing/terraform.tfstate`  |
-| 03-vault                    | `aws-infra/03-vault/terraform.tfstate`                    |
+| 02-networking/core-routing          | `aws-infra/02-networking/core-routing/terraform.tfstate`          |
+| 02-networking/core-security-groups  | `aws-infra/02-networking/core-security-groups/terraform.tfstate`  |
+| 03-vault                            | `aws-infra/03-vault/terraform.tfstate`                            |
 
 ## New Module Bootstrap
 
@@ -101,6 +103,18 @@ Route tables are defined in `route_tables.tf`. Routes are added separately as `a
 - `east_public_route_table_id`, `east_private_route_table_id`, `east_db_route_table_id` — east route table IDs
 - `west_public_route_table_id`, `west_private_route_table_id`, `west_db_route_table_id` — west route table IDs
 - `vpc_peering_connection_id` — VPC peering connection ID
+
+### core-security-groups
+
+VPC IDs are retrieved from `core-vpcs` remote state. SSH ingress is restricted to `bastion_allowed_cidr` — set this to your public IP in `terraform.tfvars`.
+
+**Resources:**
+- `aws_security_group.bastion_east`, `aws_security_group.bastion_west` — bastion host security groups
+- `aws_vpc_security_group_ingress_rule.bastion_east_ssh`, `aws_vpc_security_group_ingress_rule.bastion_west_ssh` — SSH ingress from `bastion_allowed_cidr`
+- `aws_vpc_security_group_egress_rule.bastion_east_all`, `aws_vpc_security_group_egress_rule.bastion_west_all` — all outbound traffic allowed
+
+**Outputs:**
+- `bastion_east_sg_id`, `bastion_west_sg_id` — bastion security group IDs
 
 ### Network Resources Diagram
 
