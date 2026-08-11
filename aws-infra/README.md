@@ -23,12 +23,14 @@
   - [Network Resources Diagram](#network-resources-diagram)
 - [03-iam](#03-iam)
   - [bastion](#bastion)
+- [04-vault](#04-vault)
+  - [server](#server)
 
 ## Setup
 
 - Set AWS credentials: `export AWS_PROFILE=<your-profile>` — the profile must have broad permissions to create and delete VPCs, subnets, EC2 instances, IAM roles, and S3 buckets; admin-level access is recommended
 - Run `01-bootstrap` first — it creates the S3 backend that all other modules depend on
-- Run `02-networking` modules in TOC order, then `03-iam` modules
+- Run `02-networking` modules in TOC order, then `03-iam`, then `04-vault` modules
 - For each module: `cd <module-dir> && terraform init && terraform apply`
 - `core-nat` is optional — only needed when workloads in private subnets require internet access
 
@@ -52,7 +54,7 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 | 02-networking/core-security-groups  | `aws-infra/02-networking/core-security-groups/terraform.tfstate`  |
 | 02-networking/core-nat              | `aws-infra/02-networking/core-nat/terraform.tfstate`              |
 | 03-iam/bastion                      | `aws-infra/03-iam/bastion/terraform.tfstate`                      |
-| 03-vault                            | `aws-infra/03-vault/terraform.tfstate`                            |
+| 04-vault/server                     | `aws-infra/04-vault/server/terraform.tfstate`                     |
 
 ## New Module Bootstrap
 
@@ -281,3 +283,102 @@ Instance profile shared by bastion and NAT EC2 instances. Grants SSM Session Man
 **Outputs:**
 - `bastion_instance_profile_name` — instance profile name
 - `bastion_instance_profile_arn` — instance profile ARN
+
+## 04-vault
+
+HashiCorp Vault for secrets management. Each sub-module groups resources by lifecycle layer.
+
+### server
+
+Deploys a single-node [HashiCorp Vault](https://developer.hashicorp.com/vault/docs) server in the east private subnet.
+
+**Design decisions:**
+- **Storage backend: S3** — Vault data persists in S3 and survives spot interruptions and instance termination. Raft (Integrated Storage) was considered but requires persistent local disk, which conflicts with spot instance usage.
+- **Auto-unseal: KMS** — Vault unseals automatically on every restart without operator intervention. Required for spot instances to recover without manual involvement.
+- **Instance type: `t3.micro` spot** — ~$2-3/mo. Sufficient for learning and dev workloads; Vault is lightweight at rest.
+- **TLS disabled** — acceptable for dev since all access is via SSM port forwarding.
+- **IAM role co-located** — Vault's KMS and S3 permissions are specific to this workload and not shared.
+
+**Dependencies:**
+- Apply `core-vpcs`, `core-subnets`, and `03-iam/bastion` before applying this module
+- `core-nat` must be running — Vault is in a private subnet and requires outbound internet to reach KMS (auto-unseal) and S3 (storage); the SSM agent also requires internet to register with the SSM service
+
+**Operational notes:**
+- To save costs without losing Vault data, cancel the spot request from the AWS console instead of running `terraform destroy` — S3 data and KMS key remain intact; re-apply `core-nat` then `04-vault/server` to bring it back
+- After `terraform destroy`, the KMS key enters a 7-day pending deletion window; re-applying within that window will fail due to alias conflict — delete the alias `alias/vault-unseal` from the AWS KMS console first
+
+**Production considerations:**
+- Enable TLS by configuring `tls_cert_file` and `tls_key_file` in the Vault listener block
+- Replace NAT with VPC endpoints for S3, KMS, and SSM — keeps traffic on the AWS network, removes the NAT dependency, better security posture; not used here as cost (~$7-10/mo each) exceeds the NAT instance for dev
+
+**Resource types:** [aws_instance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance), [aws_kms_key](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_key), [aws_kms_alias](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/kms_alias), [aws_s3_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket), [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role), [aws_iam_role_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy), [aws_security_group](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/security_group)
+
+**Resources:**
+- `aws_kms_key.vault_unseal` — KMS key for auto-unseal, 7-day deletion window, annual key rotation enabled
+- `aws_kms_alias.vault_unseal` — alias `alias/vault-unseal` for the unseal key
+- `aws_s3_bucket.vault_storage` — storage backend (`vault-storage-<account-id>`), versioning enabled, KMS encrypted, public access blocked
+- `aws_iam_role.vault` — EC2 trust policy
+- `aws_iam_role_policy.vault_kms` — KMS encrypt/decrypt/describe/generate-data-key on the unseal key
+- `aws_iam_role_policy.vault_s3` — get/put/delete/list on the storage bucket
+- `aws_iam_role_policy_attachment.vault_ssm` — SSM Session Manager access
+- `aws_iam_role_policy_attachment.vault_cloudwatch` — CloudWatch Logs access
+- `aws_iam_instance_profile.vault` — instance profile attached to the Vault EC2 instance
+- `aws_security_group.vault` — allows port 8200 inbound from east and west VPC CIDRs, all outbound
+- `aws_instance.vault` — `t3.micro` spot instance running Vault, user data installs and configures Vault on first boot
+
+**Outputs:**
+- `vault_instance_id` — instance ID (used in SSM commands)
+- `vault_private_ip` — private IP within the east VPC
+- `vault_s3_bucket` — storage bucket name
+- `vault_kms_key_arn` — KMS key ARN (used by the Vault config module)
+
+**First-time initialization**
+
+Vault must be initialized once after the first `terraform apply`. Open an SSM tunnel in one terminal:
+
+```bash
+aws ssm start-session --target <vault_instance_id> \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["8200"],"localPortNumber":["8200"]}' \
+  --region us-east-1
+```
+
+In a second terminal:
+
+```bash
+export VAULT_ADDR=http://localhost:8200
+vault operator init
+```
+
+Save the recovery keys and root token — they cannot be recovered if lost. KMS handles unsealing automatically on every subsequent restart; the recovery keys are only needed if the KMS key is lost or to generate a new root token.
+
+**Connecting to Vault**
+
+All access goes through SSM port forwarding — no public IP or open firewall ports required.
+
+```bash
+# Start tunnel (keep running in a separate terminal)
+aws ssm start-session --target <vault_instance_id> \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters '{"portNumber":["8200"],"localPortNumber":["8200"]}' \
+  --region us-east-1
+
+# CLI
+export VAULT_ADDR=http://localhost:8200
+vault login <root-token>
+vault secrets list
+
+# UI
+open http://localhost:8200/ui
+```
+
+**Health check**
+
+```bash
+# Via CLI
+export VAULT_ADDR=http://localhost:8200
+vault status
+
+# On the instance
+sudo systemctl status vault
+```

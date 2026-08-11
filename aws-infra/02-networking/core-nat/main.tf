@@ -1,5 +1,14 @@
-# Requires core-subnets, core-routing, and 03-iam/bastion to be applied first.
+# Requires core-vpcs, core-subnets, core-routing, and 03-iam/bastion to be applied first.
 # Plan will fail if any of those modules has not been applied yet.
+
+data "terraform_remote_state" "core_vpcs" {
+  backend = "s3"
+  config = {
+    bucket = "terraform-state-607527010331"
+    key    = "aws-infra/02-networking/core-vpcs/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
 
 data "terraform_remote_state" "core_subnets" {
   backend = "s3"
