@@ -60,6 +60,15 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 
 Copy files from `module_skel/` into the new module directory and replace the `<module-path>` placeholders in `locals.tf` and `terraform.tf` with the module's relative path (e.g. `02-networking/core-vpcs`).
 
+**Variable defaults:** All variables across all modules have defaults. No `terraform.tfvars` files are used — this is a demo project and the defaults reflect the intended configuration. Override via `-var` on the CLI if needed.
+
+**File naming convention for resource files:**
+
+- Single-region modules: suffix resource files with `_east` (e.g. `ec2_east.tf`, `iam_east.tf`). This makes it clear at a glance which region the resources target.
+- Multi-region modules: use `_east` and `_west` suffixes to split resources by region (e.g. `subnets_east.tf`, `subnets_west.tf`). One file per region per resource type.
+- `main.tf` contains only `data` blocks (remote state lookups, AMI lookups, etc.) — no managed resources.
+- Shared files with no region scope (`locals.tf`, `outputs.tf`, `variables.tf`, `providers.tf`) carry no suffix.
+
 ## 01-bootstrap
 
 Native S3 state locking via `use_lockfile = true` — no DynamoDB table required.

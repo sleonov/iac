@@ -1,8 +1,8 @@
 resource "aws_instance" "vault" {
-  ami                  = data.aws_ami.amazon_linux_2023.id
-  instance_type        = var.instance_type
-  subnet_id            = local.subnet_id
-  iam_instance_profile = aws_iam_instance_profile.vault.name
+  ami                    = data.aws_ami.amazon_linux_2023.id
+  instance_type          = var.instance_type
+  subnet_id              = local.subnet_id
+  iam_instance_profile   = aws_iam_instance_profile.vault.name
   vpc_security_group_ids = [aws_security_group.vault.id]
 
   instance_market_options {

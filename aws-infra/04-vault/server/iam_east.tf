@@ -20,10 +20,10 @@ resource "aws_iam_role_policy" "vault_kms" {
     Statement = [{
       Effect = "Allow"
       Action = [
-        "kms:Encrypt",         # seal: encrypt Vault's master key before writing to storage
-        "kms:Decrypt",         # unseal: decrypt the master key on startup
-        "kms:DescribeKey",     # verify the key exists and is enabled before use
-        "kms:GenerateDataKey"  # generate the data key used to encrypt Vault's barrier during init
+        "kms:Encrypt",        # seal: encrypt Vault's master key before writing to storage
+        "kms:Decrypt",        # unseal: decrypt the master key on startup
+        "kms:DescribeKey",    # verify the key exists and is enabled before use
+        "kms:GenerateDataKey" # generate the data key used to encrypt Vault's barrier during init
       ]
       Resource = aws_kms_key.vault_unseal.arn
     }]

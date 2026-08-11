@@ -1,5 +1,5 @@
 resource "aws_iam_role" "bastion" {
-  name = "bastion"
+  name = "bastion-server"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -23,6 +23,6 @@ resource "aws_iam_role_policy_attachment" "bastion_cloudwatch" {
 }
 
 resource "aws_iam_instance_profile" "bastion" {
-  name = "bastion"
+  name = "bastion-server"
   role = aws_iam_role.bastion.name
 }

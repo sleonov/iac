@@ -15,10 +15,10 @@ data "aws_ami" "fck_nat_east" {
 }
 
 resource "aws_instance" "nat_east" {
-  provider             = aws.east
-  ami                  = data.aws_ami.fck_nat_east.id
-  instance_type        = var.nat_instance_type
-  subnet_id            = local.east_public_subnet_a_id
+  provider               = aws.east
+  ami                    = data.aws_ami.fck_nat_east.id
+  instance_type          = var.nat_instance_type
+  subnet_id              = local.east_public_subnet_a_id
   source_dest_check      = false
   iam_instance_profile   = local.nat_instance_profile
   vpc_security_group_ids = [aws_security_group.nat_east.id]
