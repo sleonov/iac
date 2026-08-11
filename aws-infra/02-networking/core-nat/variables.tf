@@ -12,9 +12,3 @@ variable "nat_instance_type" {
   type    = string
   default = "t4g.nano"
 }
-
-variable "nat_instance_profile" {
-  type        = string
-  description = "IAM instance profile to attach to NAT instances"
-  default     = null
-}

@@ -146,7 +146,7 @@ Deploys [fck-nat](https://github.com/AndrewGuenther/fck-nat) instances as a cost
 
 AMIs are resolved at runtime from the official fck-nat AMI owner (`568608671756`) filtered by name `fck-nat-al2023-*` and architecture `arm64` — see [aws_ami data source docs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami). AMI source: [github.com/AndrewGuenther/fck-nat](https://github.com/AndrewGuenther/fck-nat), docs: [fck-nat.dev](https://fck-nat.dev/stable/).
 
-Depends on `core-subnets` (public subnet IDs) and `core-routing` (private route table IDs). Apply those modules before applying `core-nat`.
+> **WARNING:** Depends on `core-subnets` (public subnet IDs), `core-routing` (private route table IDs), and `03-iam/bastion` (instance profile). Apply those modules before applying `core-nat`.
 
 Destroy this module when no workloads in private subnets require internet access — NAT instances incur cost even when idle. Re-apply when needed.
 
@@ -161,6 +161,27 @@ Destroy this module when no workloads in private subnets require internet access
 **Outputs:**
 - `nat_east_instance_id`, `nat_west_instance_id` — NAT instance IDs
 - `nat_east_eni_id`, `nat_west_eni_id` — NAT instance primary ENI IDs
+
+**Health check**
+
+Connect via SSM (requires [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)):
+
+```bash
+aws ssm start-session --target <instance-id> --region <region>
+```
+
+Once connected, verify NAT is functioning:
+
+```bash
+# Must be 1
+cat /proc/sys/net/ipv4/ip_forward
+
+# fck-nat runs as a one-shot service — inactive (dead) with status=0 is expected
+sudo systemctl status fck-nat
+
+# Must show MASQUERADE rule on ens5
+sudo iptables -t nat -L POSTROUTING -n -v
+```
 
 ### Network Resources Diagram
 
@@ -236,7 +257,7 @@ IAM resources shared across modules. Each sub-module groups roles and instance p
 
 ### bastion
 
-Instance profile for bastion EC2 instances. Grants SSM Session Manager access (connect without SSH) and CloudWatch Logs access (ship system logs). No S3, KMS, or other permissions.
+Instance profile shared by bastion and NAT EC2 instances. Grants SSM Session Manager access (connect without SSH) and CloudWatch Logs access (ship system logs). No S3, KMS, or other permissions.
 
 **Resource types:** [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role), [aws_iam_role_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment), [aws_iam_instance_profile](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_instance_profile)
 
