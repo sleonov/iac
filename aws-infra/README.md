@@ -28,11 +28,28 @@
 
 ## Setup
 
-- Set AWS credentials: `export AWS_PROFILE=<your-profile>` — the profile must have broad permissions to create and delete VPCs, subnets, EC2 instances, IAM roles, and S3 buckets; admin-level access is recommended
-- Run `01-bootstrap` first — it creates the S3 backend that all other modules depend on
-- Run `02-networking` modules in TOC order, then `03-iam`, then `04-vault` modules
-- For each module: `cd <module-dir> && terraform init && terraform apply`
-- `core-nat` is optional — only needed when workloads in private subnets require internet access
+Set AWS credentials before applying any module:
+```bash
+export AWS_PROFILE=<your-profile>
+```
+The profile must have broad permissions to create and delete VPCs, subnets, EC2 instances, IAM roles, and S3 buckets; admin-level access is recommended.
+
+For each module: `cd <module-dir> && terraform init && terraform apply`
+
+**Apply order and dependencies:**
+
+| # | Module | Depends on |
+|---|--------|-----------|
+| 1 | `01-bootstrap` | — |
+| 2 | `02-networking/core-vpcs` | `01-bootstrap` |
+| 3 | `02-networking/core-subnets` | `core-vpcs` |
+| 4 | `02-networking/core-routing` | `core-vpcs`, `core-subnets` |
+| 5 | `03-iam/bastion` | — |
+| 6 | `02-networking/core-security-groups` | `core-vpcs` |
+| 7 | `02-networking/core-nat` *(optional)* | `core-vpcs`, `core-subnets`, `core-routing`, `03-iam/bastion` |
+| 8 | `04-vault/server` | `core-vpcs`, `core-subnets`, `03-iam/bastion`; `core-nat` must be running |
+
+`core-nat` is optional — only needed when workloads in private subnets require internet access. `04-vault/server` always requires `core-nat` to be running (Vault needs it to reach KMS and S3 on startup).
 
 ## Provider
 
@@ -68,6 +85,12 @@ Copy files from `module_skel/` into the new module directory and replace the `<m
 - Multi-region modules: use `_east` and `_west` suffixes to split resources by region (e.g. `subnets_east.tf`, `subnets_west.tf`). One file per region per resource type.
 - `main.tf` contains only `data` blocks (remote state lookups, AMI lookups, etc.) — no managed resources.
 - Shared files with no region scope (`locals.tf`, `outputs.tf`, `variables.tf`, `providers.tf`) carry no suffix.
+
+**Cross-module data sharing:**
+
+Modules pass values to each other via Terraform remote state — downstream modules declare a `data "terraform_remote_state"` block in `main.tf` and reference outputs from upstream modules through `locals.tf`. This is the primary mechanism for inter-module communication within Terraform.
+
+For consumers outside the Terraform ecosystem (scripts, CI pipelines, application config), key outputs are also published to SSM Parameter Store under `/tf/aws-infra/<module>/<key>`. These parameters are region-scoped — querying the same path in `us-east-1` vs `us-west-1` returns the respective region's value. Add an `ssm_east.tf` / `ssm_west.tf` to any new module that produces values other tooling may need.
 
 ## 01-bootstrap
 
