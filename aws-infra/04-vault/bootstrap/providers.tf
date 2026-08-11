@@ -12,7 +12,9 @@ provider "aws" {
   }
 }
 
-# Vault is in a private subnet — requires SSM port forwarding before apply:
+# Vault is in a private subnet — requires SSM port forwarding before apply.
+# Use `make vault-bootstrap` from aws-infra/ — tunnel is managed automatically by scripts/vault-tunnel.sh.
+# To open the tunnel manually:
 #   aws ssm start-session \
 #     --target $(aws ssm get-parameter --name /tf/aws-infra/vault/server/instance-id --query Parameter.Value --output text) \
 #     --document-name AWS-StartPortForwardingSession \

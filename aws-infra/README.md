@@ -20,12 +20,14 @@
   - [core-routing](#core-routing)
   - [core-security-groups](#core-security-groups)
   - [core-nat](#core-nat)
-  - [Network Resources Diagram](#network-resources-diagram)
 - [03-iam](#03-iam)
   - [bastion](#bastion)
 - [04-vault](#04-vault)
   - [server](#server)
   - [bootstrap](#bootstrap)
+- [Diagrams](#diagrams)
+  - [Network Resources Diagram](#network-resources-diagram)
+  - [Vault Resources Diagram](#vault-resources-diagram)
 
 ## Setup
 
@@ -36,6 +38,8 @@ export AWS_PROFILE=<your-profile>
 The profile must have broad permissions to create and delete VPCs, subnets, EC2 instances, IAM roles, and S3 buckets; admin-level access is recommended.
 
 For each module: `cd <module-dir> && terraform init && terraform apply`
+
+A `Makefile` at the root of `aws-infra/` provides shorthand targets for each module (e.g. `make vault-server`). The `vault-bootstrap` target also handles the SSM tunnel automatically. See the Makefile header for the required apply order and prerequisites.
 
 **Apply order and dependencies:**
 
@@ -254,74 +258,6 @@ sudo systemctl status fck-nat
 sudo iptables -t nat -L POSTROUTING -n -v
 ```
 
-### Network Resources Diagram
-
-Shows the combined resources of `core-vpcs`, `core-subnets`, `core-routing`, and `core-nat`. The two regions are connected via VPC peering `pcx-east-to-west`, shown as a dashed line at the boundary of each diagram.
-
-**us-east-1**
-
-```mermaid
-graph TD
-    INET((Internet))
-
-    subgraph east["us-east-1"]
-        IGW_E[igw-east]
-        VPC_E["vpc-east · 10.1.0.0/16"]
-        RT_E_PUB[rt-east-public]
-        RT_E_PRI[rt-east-private]
-        PUB_E_A["east-public-a · 10.1.0.0/24"]
-        PUB_E_B["east-public-b · 10.1.1.0/24"]
-        NAT_E[fck-nat-east]
-        PRI_E_A["east-private-a · 10.1.10.0/24"]
-        PRI_E_B["east-private-b · 10.1.11.0/24"]
-        DB_E_A["east-db-a · 10.1.20.0/24"]
-        DB_E_B["east-db-b · 10.1.21.0/24"]
-    end
-
-    PCX([pcx-east-to-west])
-
-    INET --> IGW_E
-    IGW_E --- VPC_E
-    VPC_E --- RT_E_PUB & RT_E_PRI
-    RT_E_PUB --> PUB_E_A & PUB_E_B
-    PUB_E_A --- NAT_E
-    RT_E_PRI --> PRI_E_A & PRI_E_B
-    PRI_E_A & PRI_E_B --> NAT_E
-    VPC_E --- DB_E_A & DB_E_B
-    VPC_E -.- PCX
-```
-
-**us-west-1**
-
-```mermaid
-graph TD
-    PCX([pcx-east-to-west])
-
-    subgraph west["us-west-1"]
-        IGW_W[igw-west]
-        VPC_W["vpc-west · 10.10.0.0/16"]
-        RT_W_PUB[rt-west-public]
-        RT_W_PRI[rt-west-private]
-        PUB_W_A["west-public-a · 10.10.0.0/24"]
-        PUB_W_B["west-public-b · 10.10.1.0/24"]
-        NAT_W[fck-nat-west]
-        PRI_W_A["west-private-a · 10.10.10.0/24"]
-        PRI_W_B["west-private-b · 10.10.11.0/24"]
-        DB_W_A["west-db-a · 10.10.20.0/24"]
-        DB_W_B["west-db-b · 10.10.21.0/24"]
-    end
-
-    PCX -.- VPC_W
-    INET((Internet)) --> IGW_W
-    IGW_W --- VPC_W
-    VPC_W --- RT_W_PUB & RT_W_PRI
-    RT_W_PUB --> PUB_W_A & PUB_W_B
-    PUB_W_A --- NAT_W
-    RT_W_PRI --> PRI_W_A & PRI_W_B
-    PRI_W_A & PRI_W_B --> NAT_W
-    VPC_W --- DB_W_A & DB_W_B
-```
-
 ## 03-iam
 
 IAM resources shared across modules. Each sub-module groups roles and instance profiles by workload.
@@ -464,6 +400,8 @@ aws ssm start-session \
 
 **Providers:** AWS + [Vault](https://registry.terraform.io/providers/hashicorp/vault/latest) (`>=4.0.0`). The Vault provider authenticates with the root token read from Secrets Manager at plan/apply time.
 
+**Resource types:** [vault_mount](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/resources/mount), [vault_auth_backend](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/resources/auth_backend), [vault_policy](https://registry.terraform.io/providers/hashicorp/vault/latest/docs/resources/policy), [aws_ssm_parameter](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter)
+
 **Resources (`vault_east.tf`):**
 - `vault_mount.kv` — KV v2 secrets engine at path `secret/`
 - `vault_auth_backend.approle` — AppRole authentication method
@@ -475,3 +413,106 @@ aws ssm start-session \
 - `kv_mount_path` — KV v2 mount path (`secret`)
 - `approle_accessor` — AppRole auth accessor ID
 - `aws_auth_accessor` — AWS auth accessor ID
+
+## Diagrams
+
+### Network Resources Diagram
+
+Shows the combined resources of `core-vpcs`, `core-subnets`, `core-routing`, and `core-nat`. The two regions are connected via VPC peering `pcx-east-to-west`, shown as a dashed line at the boundary of each diagram.
+
+**us-east-1**
+
+```mermaid
+graph TD
+    INET((Internet))
+
+    subgraph east["us-east-1"]
+        IGW_E[igw-east]
+        VPC_E["vpc-east · 10.1.0.0/16"]
+        RT_E_PUB[rt-east-public]
+        RT_E_PRI[rt-east-private]
+        PUB_E_A["east-public-a · 10.1.0.0/24"]
+        PUB_E_B["east-public-b · 10.1.1.0/24"]
+        NAT_E[fck-nat-east]
+        PRI_E_A["east-private-a · 10.1.10.0/24"]
+        PRI_E_B["east-private-b · 10.1.11.0/24"]
+        DB_E_A["east-db-a · 10.1.20.0/24"]
+        DB_E_B["east-db-b · 10.1.21.0/24"]
+    end
+
+    PCX([pcx-east-to-west])
+
+    INET --> IGW_E
+    IGW_E --- VPC_E
+    VPC_E --- RT_E_PUB & RT_E_PRI
+    RT_E_PUB --> PUB_E_A & PUB_E_B
+    PUB_E_A --- NAT_E
+    RT_E_PRI --> PRI_E_A & PRI_E_B
+    PRI_E_A & PRI_E_B --> NAT_E
+    VPC_E --- DB_E_A & DB_E_B
+    VPC_E -.- PCX
+```
+
+**us-west-1**
+
+```mermaid
+graph TD
+    PCX([pcx-east-to-west])
+
+    subgraph west["us-west-1"]
+        IGW_W[igw-west]
+        VPC_W["vpc-west · 10.10.0.0/16"]
+        RT_W_PUB[rt-west-public]
+        RT_W_PRI[rt-west-private]
+        PUB_W_A["west-public-a · 10.10.0.0/24"]
+        PUB_W_B["west-public-b · 10.10.1.0/24"]
+        NAT_W[fck-nat-west]
+        PRI_W_A["west-private-a · 10.10.10.0/24"]
+        PRI_W_B["west-private-b · 10.10.11.0/24"]
+        DB_W_A["west-db-a · 10.10.20.0/24"]
+        DB_W_B["west-db-b · 10.10.21.0/24"]
+    end
+
+    PCX -.- VPC_W
+    INET((Internet)) --> IGW_W
+    IGW_W --- VPC_W
+    VPC_W --- RT_W_PUB & RT_W_PRI
+    RT_W_PUB --> PUB_W_A & PUB_W_B
+    PUB_W_A --- NAT_W
+    RT_W_PRI --> PRI_W_A & PRI_W_B
+    PRI_W_A & PRI_W_B --> NAT_W
+    VPC_W --- DB_W_A & DB_W_B
+```
+
+### Vault Resources Diagram
+
+Shows the `04-vault/server` resources: the Vault EC2 instance in the private subnet, outbound connectivity via NAT to AWS services, and operator access via SSM port forwarding.
+
+```mermaid
+graph TD
+    subgraph pri["vpc-east · private subnet"]
+        EC2[vault-server]
+    end
+
+    subgraph pub["vpc-east · public subnet"]
+        NAT[fck-nat-east]
+    end
+
+    REPO["HashiCorp RPM repo\nrpm.releases.hashicorp.com"]
+    S3[("S3 · vault-storage-&lt;account-id&gt;")]
+    KMS["KMS · alias/vault-unseal"]
+    SM["Secrets Manager · vault/init"]
+    SSM((SSM))
+    OPS((operator))
+    INET(("Internet\nAWS public endpoints"))
+
+    EC2 -->|outbound via default route| NAT
+    NAT -->|no VPC endpoints - traffic exits to internet| INET
+    INET -->|"install vault package (first boot)"| REPO
+    INET -->|storage backend| S3
+    INET -->|auto-unseal| KMS
+    INET -->|write init credentials| SM
+    INET -->|SSM agent keeps persistent\noutbound connection| SSM
+    OPS -->|"ssm port-forward :8200"| SSM
+    SSM -. "tunnel · exposes :8200 on localhost\nso Terraform Vault provider can connect" .-> EC2
+```
