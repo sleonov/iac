@@ -53,6 +53,23 @@ resource "aws_instance" "vault" {
 
     systemctl enable vault
     systemctl start vault
+
+    # Auto-initialize Vault on first boot
+    export VAULT_ADDR="http://127.0.0.1:8200"
+
+    # Wait for Vault API to be ready (KMS auto-unseal happens automatically)
+    until vault status > /dev/null 2>&1; do
+      sleep 2
+    done
+
+    # Only initialize if not already initialized (idempotent across reboots)
+    if vault status -format=json | python3 -c "import sys,json; sys.exit(0 if not json.load(sys.stdin)['initialized'] else 1)" 2>/dev/null; then
+      INIT_OUTPUT=$(vault operator init -format=json)
+      aws secretsmanager put-secret-value \
+        --region "${var.region}" \
+        --secret-id "${aws_secretsmanager_secret.vault_init.arn}" \
+        --secret-string "$INIT_OUTPUT"
+    fi
   EOT
 
   tags = {

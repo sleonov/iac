@@ -93,7 +93,27 @@ Copy files from `module_skel/` into the new module directory and replace the `<m
 
 Modules pass values to each other via Terraform remote state — downstream modules declare a `data "terraform_remote_state"` block in `main.tf` and reference outputs from upstream modules through `locals.tf`. This is the primary mechanism for inter-module communication within Terraform.
 
-For consumers outside the Terraform ecosystem (scripts, CI pipelines, application config), key outputs are also published to SSM Parameter Store under `/tf/aws-infra/<module>/<key>`. These parameters are region-scoped — querying the same path in `us-east-1` vs `us-west-1` returns the respective region's value. Add an `ssm_east.tf` / `ssm_west.tf` to any new module that produces values other tooling may need.
+For consumers outside the Terraform ecosystem (scripts, CI pipelines, application config), key outputs are also published to SSM Parameter Store. Paths follow the directory structure of the repo, stripping the numeric prefix:
+
+```
+/tf/aws-infra/<category>/<module>/<key>
+```
+
+| Category | Maps to |
+|---|---|
+| `networking` | `02-networking/` |
+| `iam` | `03-iam/` |
+| `vault` | `04-vault/`, `05-vault/` |
+
+Examples:
+```
+/tf/aws-infra/networking/core-vpcs/vpc-id
+/tf/aws-infra/iam/bastion/instance-profile-arn
+/tf/aws-infra/vault/server/instance-id
+/tf/aws-infra/vault/bootstrap/kv-mount-path
+```
+
+These parameters are region-scoped — querying the same path in `us-east-1` vs `us-west-1` returns the respective region's value. The hierarchy lets you query all parameters for a category or module with a single `get-parameters-by-path` call, e.g. `aws ssm get-parameters-by-path --path /tf/aws-infra/vault/ --recursive`. Add an `ssm_east.tf` / `ssm_west.tf` to any new module that produces values other tooling may need.
 
 ## 01-bootstrap
 

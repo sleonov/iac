@@ -64,6 +64,20 @@ resource "aws_iam_role_policy_attachment" "vault_cloudwatch" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
+resource "aws_iam_role_policy" "vault_secretsmanager" {
+  name = "vault-secretsmanager-init"
+  role = aws_iam_role.vault.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:PutSecretValue", "secretsmanager:DescribeSecret"]
+      Resource = aws_secretsmanager_secret.vault_init.arn
+    }]
+  })
+}
+
 resource "aws_iam_instance_profile" "vault" {
   name = "vault-server"
   role = aws_iam_role.vault.name

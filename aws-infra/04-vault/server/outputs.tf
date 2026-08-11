@@ -13,3 +13,7 @@ output "vault_s3_bucket" {
 output "vault_kms_key_arn" {
   value = aws_kms_key.vault_unseal.arn
 }
+
+output "vault_init_secret_arn" {
+  value = aws_secretsmanager_secret.vault_init.arn
+}
