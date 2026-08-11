@@ -25,6 +25,7 @@
   - [bastion](#bastion)
 - [04-vault](#04-vault)
   - [server](#server)
+  - [bootstrap](#bootstrap)
 
 ## Setup
 
@@ -51,6 +52,7 @@ Dependencies in the table below are derived from `data "terraform_remote_state"`
 | 5 | `02-networking/core-security-groups` | `core-vpcs` |
 | 6 | `02-networking/core-nat` *(optional)* | `core-vpcs`, `core-subnets`, `core-routing`, `03-iam/bastion` |
 | 7 | `04-vault/server` | `core-vpcs`, `core-subnets`; `core-nat` must be running |
+| 8 | `04-vault/bootstrap` | `04-vault/server` applied and initialized; SSM port forwarding active |
 
 `core-nat` is optional — only needed when workloads in private subnets require internet access. `04-vault/server` always requires `core-nat` to be running (Vault needs it to reach KMS and S3 on startup).
 
@@ -75,6 +77,7 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 | 02-networking/core-nat              | `aws-infra/02-networking/core-nat/terraform.tfstate`              |
 | 03-iam/bastion                      | `aws-infra/03-iam/bastion/terraform.tfstate`                      |
 | 04-vault/server                     | `aws-infra/04-vault/server/terraform.tfstate`                     |
+| 04-vault/bootstrap                  | `aws-infra/04-vault/bootstrap/terraform.tfstate`                  |
 
 ## New Module Bootstrap
 
@@ -103,7 +106,7 @@ For consumers outside the Terraform ecosystem (scripts, CI pipelines, applicatio
 |---|---|
 | `networking` | `02-networking/` |
 | `iam` | `03-iam/` |
-| `vault` | `04-vault/`, `05-vault/` |
+| `vault` | `04-vault/` |
 
 Examples:
 ```
@@ -361,6 +364,9 @@ Deploys a single-node [HashiCorp Vault](https://developer.hashicorp.com/vault/do
 **Operational notes:**
 - To save costs without losing Vault data, cancel the spot request from the AWS console instead of running `terraform destroy` — S3 data and KMS key remain intact; re-apply `core-nat` then `04-vault/server` to bring it back
 - After `terraform destroy`, the KMS key enters a 7-day pending deletion window; re-applying within that window will fail due to alias conflict — delete the alias `alias/vault-unseal` from the AWS KMS console first
+- Applying changes to `user_data` (e.g. this module) will cause Terraform to **replace the EC2 instance** — `user_data` is immutable on running instances. Vault data is safe: storage is in S3 and the unseal key is in KMS; the new instance will auto-unseal and resume normally
+- On instance replacement, `vault operator init` is skipped automatically — Vault determines its initialized state by reading S3 on startup, so `user_data` only runs init if S3 contains no existing Vault data
+- To fully re-initialize Vault from scratch (e.g. for testing), empty the S3 storage bucket before applying: `aws s3 rm s3://<vault-storage-bucket> --recursive --region us-east-1`; the `vault/init` secret will be overwritten automatically with the new credentials on first boot
 
 **Production considerations:**
 - Enable TLS by configuring `tls_cert_file` and `tls_key_file` in the Vault listener block
@@ -389,23 +395,19 @@ Deploys a single-node [HashiCorp Vault](https://developer.hashicorp.com/vault/do
 
 **First-time initialization**
 
-Vault must be initialized once after the first `terraform apply`. Open an SSM tunnel in one terminal:
+Vault initializes automatically on first boot. The `user_data` script waits for the API to be ready, checks S3 to confirm Vault is uninitialized, runs `vault operator init`, and stores the root token and recovery keys to Secrets Manager at `vault/init`.
+
+To retrieve them after apply:
 
 ```bash
-aws ssm start-session --target <vault_instance_id> \
-  --document-name AWS-StartPortForwardingSession \
-  --parameters '{"portNumber":["8200"],"localPortNumber":["8200"]}' \
-  --region us-east-1
+aws secretsmanager get-secret-value \
+  --secret-id vault/init \
+  --region us-east-1 \
+  --query SecretString \
+  --output text
 ```
 
-In a second terminal:
-
-```bash
-export VAULT_ADDR=http://localhost:8200
-vault operator init
-```
-
-Save the recovery keys and root token — they cannot be recovered if lost. KMS handles unsealing automatically on every subsequent restart; the recovery keys are only needed if the KMS key is lost or to generate a new root token.
+The secret contains the full output of `vault operator init -format=json`: `root_token`, `recovery_keys_b64/hex`, and `recovery_keys_shares/threshold`. It is not needed for normal operations — KMS handles unsealing automatically on every restart. Retain it for two recovery scenarios: (1) the root token is lost and needs to be regenerated, (2) the KMS key is deleted or inaccessible and Vault cannot unseal.
 
 **Connecting to Vault**
 
@@ -418,9 +420,13 @@ aws ssm start-session --target <vault_instance_id> \
   --parameters '{"portNumber":["8200"],"localPortNumber":["8200"]}' \
   --region us-east-1
 
-# CLI
+# CLI — root token is stored in Secrets Manager at vault/init
 export VAULT_ADDR=http://localhost:8200
-vault login <root-token>
+export VAULT_TOKEN=$(aws secretsmanager get-secret-value \
+  --secret-id vault/init \
+  --region us-east-1 \
+  --query SecretString \
+  --output text | jq -r '.root_token')
 vault secrets list
 
 # UI
@@ -437,3 +443,35 @@ vault status
 # On the instance
 sudo systemctl status vault
 ```
+
+### bootstrap
+
+Configures Vault after initialization using the [Vault Terraform provider](https://registry.terraform.io/providers/hashicorp/vault/latest). Reads the root token from Secrets Manager and connects to Vault via the SSM tunnel established before apply.
+
+**Dependencies:**
+- `04-vault/server` must be applied and Vault must be fully initialized (secret at `vault/init` must exist)
+- SSM port forwarding must be active before running `terraform apply` — Vault is in a private subnet
+
+**Before applying:**
+
+```bash
+# Start SSM tunnel (keep running in a separate terminal)
+aws ssm start-session \
+  --target $(aws ssm get-parameter --name /tf/aws-infra/vault/server/instance-id --query Parameter.Value --output text --region us-east-1) \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters portNumber=8200,localPortNumber=8200
+```
+
+**Providers:** AWS + [Vault](https://registry.terraform.io/providers/hashicorp/vault/latest) (`>=4.0.0`). The Vault provider authenticates with the root token read from Secrets Manager at plan/apply time.
+
+**Resources (`vault_east.tf`):**
+- `vault_mount.kv` — KV v2 secrets engine at path `secret/`
+- `vault_auth_backend.approle` — AppRole authentication method
+- `vault_auth_backend.aws` — AWS IAM authentication method
+- `vault_policy.admin` — full access to all paths (`*`)
+- `vault_policy.read_only` — read-only access to `secret/data/*` and `secret/metadata/*`
+
+**Outputs:**
+- `kv_mount_path` — KV v2 mount path (`secret`)
+- `approle_accessor` — AppRole auth accessor ID
+- `aws_auth_accessor` — AWS auth accessor ID

@@ -1,3 +1,10 @@
+# IAM role and policies for the Vault EC2 instance:
+#   vault-kms-unseal        — encrypt/decrypt with the KMS auto-unseal key
+#   vault-s3-storage        — read/write/delete/list on the S3 storage bucket
+#   vault-secretsmanager-init — write root token and recovery keys to Secrets Manager on first boot
+#   AmazonSSMManagedInstanceCore — SSM Session Manager access (no SSH required)
+#   CloudWatchAgentServerPolicy  — ship system and Vault audit logs to CloudWatch
+
 resource "aws_iam_role" "vault" {
   name = "vault-server"
 
@@ -52,13 +59,11 @@ resource "aws_iam_role_policy" "vault_s3" {
   })
 }
 
-# Allows connecting to the instance via AWS SSM Session Manager without SSH
 resource "aws_iam_role_policy_attachment" "vault_ssm" {
   role       = aws_iam_role.vault.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
-# Allows the CloudWatch agent to ship system and Vault audit logs
 resource "aws_iam_role_policy_attachment" "vault_cloudwatch" {
   role       = aws_iam_role.vault.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"

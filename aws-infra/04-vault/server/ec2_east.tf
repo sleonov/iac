@@ -13,6 +13,10 @@ resource "aws_instance" "vault" {
     }
   }
 
+  # force destroy+create on user_data changes — in-place update (stop→update→start)
+  # causes IncorrectSpotRequestState on persistent spot instances
+  user_data_replace_on_change = true
+
   root_block_device {
     volume_type = "gp3"
     volume_size = var.root_volume_size
@@ -58,12 +62,19 @@ resource "aws_instance" "vault" {
     export VAULT_ADDR="http://127.0.0.1:8200"
 
     # Wait for Vault API to be ready (KMS auto-unseal happens automatically)
-    until vault status > /dev/null 2>&1; do
+    # curl health endpoint instead of `vault status` — vault status exits 2 when sealed,
+    # which would keep the loop running forever on an uninitialized instance
+    until curl -s http://127.0.0.1:8200/v1/sys/health > /dev/null 2>&1; do
       sleep 2
     done
 
     # Only initialize if not already initialized (idempotent across reboots)
-    if vault status -format=json | python3 -c "import sys,json; sys.exit(0 if not json.load(sys.stdin)['initialized'] else 1)" 2>/dev/null; then
+    # capture status separately — piping vault status directly causes pipefail to trigger
+    # on exit code 2 (sealed), which makes the if condition evaluate to false
+    # capture status separately to avoid pipefail on exit code 2 (sealed);
+    # grep avoids python/jq dependency — vault -format=json output is stable
+    VAULT_STATUS=$(vault status -format=json 2>/dev/null || true)
+    if echo "$VAULT_STATUS" | grep -q '"initialized": false'; then
       INIT_OUTPUT=$(vault operator init -format=json)
       aws secretsmanager put-secret-value \
         --region "${var.region}" \
