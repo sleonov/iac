@@ -1,3 +1,5 @@
+> **WARNING:** This repository is provided for educational purposes only. The author is not liable for any damage, data loss, or costs incurred as a result of using this code. Use at your own risk.
+
 ## AWS infra setup
 
 > **NOTE:**
@@ -7,6 +9,7 @@
 
 ## Table of Contents
 
+- [Setup](#setup)
 - [Provider](#provider)
 - [Remote State](#remote-state)
 - [New Module Bootstrap](#new-module-bootstrap)
@@ -20,6 +23,14 @@
   - [Network Resources Diagram](#network-resources-diagram)
 - [03-iam](#03-iam)
   - [bastion](#bastion)
+
+## Setup
+
+- Set AWS credentials: `export AWS_PROFILE=<your-profile>` — the profile must have broad permissions to create and delete VPCs, subnets, EC2 instances, IAM roles, and S3 buckets; admin-level access is recommended
+- Run `01-bootstrap` first — it creates the S3 backend that all other modules depend on
+- Run `02-networking` modules in TOC order, then `03-iam` modules
+- For each module: `cd <module-dir> && terraform init && terraform apply`
+- `core-nat` is optional — only needed when workloads in private subnets require internet access
 
 ## Provider
 
