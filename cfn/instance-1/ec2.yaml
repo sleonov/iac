@@ -1,0 +1,39 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  SubnetId:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet id to deploy
+    Default: subnet-028c2c5c5b86f561b
+  LaunchTemplateId:
+    Type: String
+    Description: Launch Template Id
+    Default: lt-0489c51c490ac08b8
+  LaunchTemplateVersion:
+    Type: Number
+    Description: Launch Template Version
+    Default: 2
+  NameTag:
+    Type: String
+    Description: Value of Name tag
+    Default: Some EC2 Instance for learning
+
+Resources:
+  Ec2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplateId
+        Version: !Ref LaunchTemplateVersion
+      Tags:
+        - Key: Name
+          Value: !Ref NameTag
+        - Key: ProjectRef
+          Value: !Sub "${AWS::StackName}-${AWS::AccountId}"
+
+Outputs:
+  Ec2InstanceId:
+    Description: Instance id
+    Value: !GetAtt Ec2Instance.InstanceId
+    Export:
+      Name: Ec2InstanceExport
