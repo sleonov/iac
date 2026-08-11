@@ -1,3 +1,5 @@
+> **WARNING:** This repository is provided for educational purposes only. The author is not liable for any damage, data loss, or costs incurred as a result of using this code. Use at your own risk.
+
 ## AWS infra setup
 
 > **NOTE:**
@@ -7,6 +9,7 @@
 
 ## Table of Contents
 
+- [Setup](#setup)
 - [Provider](#provider)
 - [Remote State](#remote-state)
 - [New Module Bootstrap](#new-module-bootstrap)
@@ -16,9 +19,18 @@
   - [core-subnets](#core-subnets)
   - [core-routing](#core-routing)
   - [core-security-groups](#core-security-groups)
+  - [core-nat](#core-nat)
   - [Network Resources Diagram](#network-resources-diagram)
 - [03-iam](#03-iam)
   - [bastion](#bastion)
+
+## Setup
+
+- Set AWS credentials: `export AWS_PROFILE=<your-profile>` — the profile must have broad permissions to create and delete VPCs, subnets, EC2 instances, IAM roles, and S3 buckets; admin-level access is recommended
+- Run `01-bootstrap` first — it creates the S3 backend that all other modules depend on
+- Run `02-networking` modules in TOC order, then `03-iam` modules
+- For each module: `cd <module-dir> && terraform init && terraform apply`
+- `core-nat` is optional — only needed when workloads in private subnets require internet access
 
 ## Provider
 
@@ -32,12 +44,13 @@ All modules use the [AWS Terraform provider](https://registry.terraform.io/provi
 
 All modules store state in S3 bucket `terraform-state-607527010331`. It is created in `01-bootstrap` step, using local state.
 
-| Module                      | State key                                                 |
-|-----------------------------|-----------------------------------------------------------|
-| 02-networking/core-vpcs     | `aws-infra/02-networking/core-vpcs/terraform.tfstate`     |
-| 02-networking/core-subnets  | `aws-infra/02-networking/core-subnets/terraform.tfstate`  |
+| Module                              | State key                                                         |
+|-------------------------------------|-------------------------------------------------------------------|
+| 02-networking/core-vpcs             | `aws-infra/02-networking/core-vpcs/terraform.tfstate`             |
+| 02-networking/core-subnets          | `aws-infra/02-networking/core-subnets/terraform.tfstate`          |
 | 02-networking/core-routing          | `aws-infra/02-networking/core-routing/terraform.tfstate`          |
 | 02-networking/core-security-groups  | `aws-infra/02-networking/core-security-groups/terraform.tfstate`  |
+| 02-networking/core-nat              | `aws-infra/02-networking/core-nat/terraform.tfstate`              |
 | 03-iam/bastion                      | `aws-infra/03-iam/bastion/terraform.tfstate`                      |
 | 03-vault                            | `aws-infra/03-vault/terraform.tfstate`                            |
 
@@ -97,7 +110,7 @@ VPC CIDRs are retrieved from `core-vpcs` remote state. Subnet CIDRs are derived 
 
 ### core-routing
 
-VPC peering between east (`us-east-1`) and west (`us-west-1`) regions. Private subnets have local routing only (no NAT). DB subnets are fully isolated — local routing only, no IGW or peering routes.
+VPC peering between east (`us-east-1`) and west (`us-west-1`) regions. Private subnets route internet-bound traffic through fck-nat instances (added by `core-nat`). DB subnets are fully isolated — local routing only, no IGW or peering routes.
 
 Route tables are defined in `route_tables.tf`. Routes are added separately as `aws_route` resources in `igw.tf` and `vpc_peering.tf`.
 
@@ -106,10 +119,10 @@ Route tables are defined in `route_tables.tf`. Routes are added separately as `a
 | Route table | Routes |
 |---|---|
 | `rt-east-public` | `0.0.0.0/0 → igw-east`, `10.10.0.0/16 → pcx` |
-| `rt-east-private` | `10.10.0.0/16 → pcx` |
+| `rt-east-private` | `10.10.0.0/16 → pcx`, `0.0.0.0/0 → fck-nat-east` _(added by core-nat)_ |
 | `rt-east-db` | local only |
 | `rt-west-public` | `0.0.0.0/0 → igw-west`, `10.1.0.0/16 → pcx` |
-| `rt-west-private` | `10.1.0.0/16 → pcx` |
+| `rt-west-private` | `10.1.0.0/16 → pcx`, `0.0.0.0/0 → fck-nat-west` _(added by core-nat)_ |
 | `rt-west-db` | local only |
 
 **Resources:**
@@ -138,56 +151,115 @@ VPC IDs are retrieved from `core-vpcs` remote state. SSH ingress is restricted t
 **Outputs:**
 - `bastion_east_sg_id`, `bastion_west_sg_id` — bastion security group IDs
 
+### core-nat
+
+Deploys [fck-nat](https://github.com/AndrewGuenther/fck-nat) instances as a cost-effective alternative to AWS managed NAT Gateways (~$1-2/mo vs ~$65/mo). Instances run as ARM64 spot instances (`t4g.nano`) with `persistent` stop behavior — they recover automatically after spot interruption without operator intervention. `source_dest_check = false` is required so the instance forwards packets between subnets.
+
+AMIs are resolved at runtime from the official fck-nat AMI owner (`568608671756`) filtered by name `fck-nat-al2023-*` and architecture `arm64` — see [aws_ami data source docs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami). AMI source: [github.com/AndrewGuenther/fck-nat](https://github.com/AndrewGuenther/fck-nat), docs: [fck-nat.dev](https://fck-nat.dev/stable/).
+
+> **WARNING:** Depends on `core-subnets` (public subnet IDs), `core-routing` (private route table IDs), and `03-iam/bastion` (instance profile). Apply those modules before applying `core-nat`.
+
+Destroy this module when no workloads in private subnets require internet access — NAT instances incur cost even when idle. Re-apply when needed.
+
+**Resource types:** [aws_instance](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance), [aws_ami](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/ami) (data source), [aws_route](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route)
+
+**Resources:**
+- `aws_instance.nat_east` — fck-nat ARM64 spot instance in `east-public-a`, `source_dest_check = false`
+- `aws_instance.nat_west` — fck-nat ARM64 spot instance in `west-public-a`, `source_dest_check = false`
+- `aws_route.east_private_to_nat` — `0.0.0.0/0` route in `rt-east-private` pointing to NAT east ENI
+- `aws_route.west_private_to_nat` — `0.0.0.0/0` route in `rt-west-private` pointing to NAT west ENI
+
+**Outputs:**
+- `nat_east_instance_id`, `nat_west_instance_id` — NAT instance IDs
+- `nat_east_eni_id`, `nat_west_eni_id` — NAT instance primary ENI IDs
+
+**Health check**
+
+Connect via SSM (requires [Session Manager plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)):
+
+```bash
+aws ssm start-session --target <instance-id> --region <region>
+```
+
+Once connected, verify NAT is functioning:
+
+```bash
+# Must be 1
+cat /proc/sys/net/ipv4/ip_forward
+
+# fck-nat runs as a one-shot service — inactive (dead) with status=0 is expected
+sudo systemctl status fck-nat
+
+# Must show MASQUERADE rule on ens5
+sudo iptables -t nat -L POSTROUTING -n -v
+```
+
 ### Network Resources Diagram
 
-Shows the combined resources of `core-vpcs`, `core-subnets`, and `core-routing`.
+Shows the combined resources of `core-vpcs`, `core-subnets`, `core-routing`, and `core-nat`. The two regions are connected via VPC peering `pcx-east-to-west`, shown as a dashed line at the boundary of each diagram.
+
+**us-east-1**
 
 ```mermaid
 graph TD
     INET((Internet))
 
     subgraph east["us-east-1"]
-
-        IGW_E[igw-east-compute]
-        VPC_E["vpc-east-compute · 10.1.0.0/16"]
+        IGW_E[igw-east]
+        VPC_E["vpc-east · 10.1.0.0/16"]
         RT_E_PUB[rt-east-public]
         RT_E_PRI[rt-east-private]
         PUB_E_A["east-public-a · 10.1.0.0/24"]
         PUB_E_B["east-public-b · 10.1.1.0/24"]
+        NAT_E[fck-nat-east]
         PRI_E_A["east-private-a · 10.1.10.0/24"]
         PRI_E_B["east-private-b · 10.1.11.0/24"]
         DB_E_A["east-db-a · 10.1.20.0/24"]
         DB_E_B["east-db-b · 10.1.21.0/24"]
     end
 
-    subgraph west["us-west-1"]
+    PCX([pcx-east-to-west])
 
-        IGW_W[igw-west-compute]
-        VPC_W["vpc-west-compute · 10.10.0.0/16"]
+    INET --> IGW_E
+    IGW_E --- VPC_E
+    VPC_E --- RT_E_PUB & RT_E_PRI
+    RT_E_PUB --> PUB_E_A & PUB_E_B
+    PUB_E_A --- NAT_E
+    RT_E_PRI --> PRI_E_A & PRI_E_B
+    PRI_E_A & PRI_E_B --> NAT_E
+    VPC_E --- DB_E_A & DB_E_B
+    VPC_E -.- PCX
+```
+
+**us-west-1**
+
+```mermaid
+graph TD
+    PCX([pcx-east-to-west])
+
+    subgraph west["us-west-1"]
+        IGW_W[igw-west]
+        VPC_W["vpc-west · 10.10.0.0/16"]
         RT_W_PUB[rt-west-public]
         RT_W_PRI[rt-west-private]
         PUB_W_A["west-public-a · 10.10.0.0/24"]
         PUB_W_B["west-public-b · 10.10.1.0/24"]
+        NAT_W[fck-nat-west]
         PRI_W_A["west-private-a · 10.10.10.0/24"]
         PRI_W_B["west-private-b · 10.10.11.0/24"]
         DB_W_A["west-db-a · 10.10.20.0/24"]
         DB_W_B["west-db-b · 10.10.21.0/24"]
     end
 
-    PCX[pcx-east-to-west]
-
-    INET --> IGW_E & IGW_W
-    IGW_E --- VPC_E
+    PCX -.- VPC_W
+    INET((Internet)) --> IGW_W
     IGW_W --- VPC_W
-    VPC_E --- RT_E_PUB & RT_E_PRI
     VPC_W --- RT_W_PUB & RT_W_PRI
-    RT_E_PUB --> PUB_E_A & PUB_E_B
-    RT_E_PRI --> PRI_E_A & PRI_E_B
-    VPC_E --- DB_E_A & DB_E_B
     RT_W_PUB --> PUB_W_A & PUB_W_B
+    PUB_W_A --- NAT_W
     RT_W_PRI --> PRI_W_A & PRI_W_B
+    PRI_W_A & PRI_W_B --> NAT_W
     VPC_W --- DB_W_A & DB_W_B
-    VPC_E --- PCX --- VPC_W
 ```
 
 ## 03-iam
@@ -196,7 +268,7 @@ IAM resources shared across modules. Each sub-module groups roles and instance p
 
 ### bastion
 
-Instance profile for bastion EC2 instances. Grants SSM Session Manager access (connect without SSH) and CloudWatch Logs access (ship system logs). No S3, KMS, or other permissions.
+Instance profile shared by bastion and NAT EC2 instances. Grants SSM Session Manager access (connect without SSH) and CloudWatch Logs access (ship system logs). No S3, KMS, or other permissions.
 
 **Resource types:** [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role), [aws_iam_role_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment), [aws_iam_instance_profile](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_instance_profile)
 
