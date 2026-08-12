@@ -525,11 +525,10 @@ Automatically creates and deletes Route53 private-zone A records as EC2 instance
 > **NOTE — DNS opt-in tag:**
 > - Add `manage-r53-record = ""` to an EC2 instance resource in Terraform to opt in to automatic DNS registration.
 > - Instances without the `manage-r53-record` tag are silently skipped.
-> - The Lambda writes the resulting FQDN to a separate `fqdn` tag (not managed by Terraform) on first start, and reads it back on termination to delete the record.
 > - The instance must also have a `Name` tag — it is combined with the instance ID (without the `i-` prefix) to build a unique FQDN: `<Name>-<instance-id>.<private-zone-name>` (e.g. `vault-server-0abc1234567890def.use1.internal.unixovich.net`).
-> - On restart, if the `Name` tag has changed since last start, the old record is deleted before the new one is created.
+> - On shutdown, the FQDN is reconstructed from the current `Name` tag and instance ID — no state is stored on the instance.
 
-**Opt-in mechanism:** only instances tagged with `manage-r53-record` (any value) are processed. Instances without the tag are silently skipped. The Lambda writes the created FQDN to a separate `fqdn` tag (unmanaged by Terraform) so delete knows which record to remove. On restart, if the `Name` tag has changed, the old record is deleted before the new one is created — preventing stale records from accumulating.
+**Opt-in mechanism:** only instances tagged with `manage-r53-record` (any value) are processed. Instances without the tag are silently skipped. The FQDN is derived at runtime from the instance `Name` tag and instance ID — no state is stored on the instance. On shutdown, the same FQDN is reconstructed and the record deleted; if no record exists, a warning is logged and the handler exits cleanly.
 
 **Dependencies:**
 - Apply `02-networking/core-dns` before applying this module — the Lambda reads zone ID and name from SSM paths published by that module
@@ -548,7 +547,6 @@ Automatically creates and deletes Route53 private-zone A records as EC2 instance
 - `aws_iam_role_policy_attachment.route53` — Route53 A record management (`AmazonRoute53FullAccess`)
 - `aws_iam_role_policy_attachment.ec2_read` — describe instances and tags (`AmazonEC2ReadOnlyAccess`)
 - `aws_iam_role_policy_attachment.ssm_read` — read zone ID/name from SSM (`AmazonSSMReadOnlyAccess`)
-- `aws_iam_role_policy.ec2_tags` — inline `ec2:CreateTags` to write FQDN back to `fqdn` tag
 - `aws_cloudwatch_event_rule.ec2_state_east` / `ec2_state_west` — EventBridge rules firing on `running` and `shutting-down` state changes
 - `aws_cloudwatch_event_target.lambda_east` / `lambda_west` — routes events to the respective Lambda
 - `aws_lambda_permission.eventbridge_east` / `eventbridge_west` — resource-based policy granting EventBridge the right to invoke the Lambda
@@ -747,7 +745,6 @@ graph TD
     L -->|"6. read zone name"| SSM
     ID & SSM -->|"7. combine"| REC
     REC -->|"8. upsert / delete A record"| R53
-    L -->|"9. write FQDN to fqdn tag"| INST
 ```
 
 ---
