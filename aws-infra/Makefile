@@ -1,5 +1,5 @@
 # Targets are independent — run them individually in the order documented in README.md.
-# Apply order: core-vpcs → core-subnets → core-routing → core-security-groups → iam-bastion → core-nat → core-dns → vault-server → vault-bootstrap → vault-client
+# Apply order: core-vpcs → core-subnets → core-routing → core-security-groups → iam-bastion → core-nat → core-dns → record-manager → vault-server → vault-bootstrap → vault-client
 # Requires AWS_PROFILE to be set: export AWS_PROFILE=<your-profile>
 
 AWS_REGION ?= us-east-1
@@ -15,25 +15,32 @@ TF_COMMAND   = $(if $(DESTROY),destroy -auto-approve,$(if $(PLAN),plan,apply -au
 .DEFAULT_GOAL := help
 
 .PHONY: help core-vpcs core-subnets core-routing core-security-groups core-nat core-nat-status \
-	core-dns iam-bastion vault-server vault-bootstrap vault-status vault-client
+	core-dns iam-bastion vault-server vault-bootstrap vault-status vault-client \
+	record-manager test-record-manager
 
 help:
 	@echo "Usage: make <target> [PLAN=1] [DESTROY=1] [AWS_REGION=us-east-1]"
 	@echo "  Default action is apply. Use PLAN=1 to plan, DESTROY=1 to destroy."
 	@echo ""
-	@echo "Targets:"
+	@echo "Infrastructure:"
 	@echo "  core-vpcs            02-networking/core-vpcs"
 	@echo "  core-subnets         02-networking/core-subnets"
 	@echo "  core-routing         02-networking/core-routing"
 	@echo "  core-security-groups 02-networking/core-security-groups"
 	@echo "  core-nat             02-networking/core-nat"
-	@echo "  core-nat-status      check NAT instance iptables and service status via SSM"
 	@echo "  core-dns             02-networking/core-dns"
 	@echo "  iam-bastion          03-iam/bastion"
 	@echo "  vault-server         04-vault/server"
 	@echo "  vault-bootstrap      04-vault/bootstrap  (manages SSM tunnel automatically)"
-	@echo "  vault-status         run vault status via SSM tunnel"
 	@echo "  vault-client         04-vault/client"
+	@echo "  record-manager       05-dns-automation/record-manager"
+	@echo ""
+	@echo "Infrastructure tests:"
+	@echo "  core-nat-status      check NAT instance iptables and service status via SSM"
+	@echo "  vault-status         run vault status via SSM tunnel"
+	@echo ""
+	@echo "Code tests:"
+	@echo "  test-record-manager  record-manager Lambda unit tests"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make vault-server"
@@ -79,3 +86,9 @@ vault-status:
 
 vault-client:
 	cd 04-vault/client && terraform init && terraform $(TF_COMMAND)
+
+record-manager:
+	cd 05-dns-automation/record-manager && terraform init && terraform $(TF_COMMAND)
+
+test-record-manager:
+	cd lambda/record-manager && pip install -q -r requirements-test.txt && pytest tests/ -v

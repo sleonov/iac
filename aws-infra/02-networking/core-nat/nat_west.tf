@@ -32,7 +32,8 @@ resource "aws_instance" "nat_west" {
   }
 
   tags = {
-    Name = "fck-nat-west"
+    Name       = "fck-nat-west"
+    manage-r53-record = ""
   }
 }
 

@@ -28,10 +28,13 @@
     - [server](#server)
     - [bootstrap](#bootstrap)
     - [client](#client)
+  - [05-dns-automation](#05-dns-automation)
+    - [record-manager](#record-manager)
 - [New Module Bootstrap](#new-module-bootstrap)
 - [Diagrams](#diagrams)
   - [Network Resources Diagram](#network-resources-diagram)
   - [Hosted Zones Diagram](#hosted-zones-diagram)
+  - [DNS Automation Diagram](#dns-automation-diagram)
   - [Vault Resources Diagram](#vault-resources-diagram)
   - [Vault Client Diagram](#vault-client-diagram)
 
@@ -64,9 +67,10 @@ For consumers outside the Terraform ecosystem — scripts, CI pipelines, applica
 | 5 | `02-networking/core-security-groups` | `core-vpcs` |
 | 6 | `02-networking/core-nat` *(optional)* | `core-vpcs`, `core-subnets`, `core-routing`, `03-iam/bastion` |
 | 7 | `02-networking/core-dns` | `core-vpcs` |
-| 8 | `04-vault/server` | `core-vpcs`, `core-subnets`; `core-nat` must be running |
-| 9 | `04-vault/bootstrap` | `04-vault/server` applied and initialized; use `make vault-bootstrap` |
-| 10 | `04-vault/client` | `core-vpcs`, `core-subnets`, `03-iam/bastion`, `04-vault/server`; `core-nat` must be running |
+| 8 | `05-dns-automation/record-manager` | `core-dns` |
+| 9 | `04-vault/server` | `core-vpcs`, `core-subnets`; `core-nat` must be running |
+| 10 | `04-vault/bootstrap` | `04-vault/server` applied and initialized; use `make vault-bootstrap` |
+| 11 | `04-vault/client` | `core-vpcs`, `core-subnets`, `03-iam/bastion`, `04-vault/server`; `core-nat` must be running |
 
 `core-nat` is optional — only needed when workloads in private subnets require internet access. `04-vault/server` always requires `core-nat` to be running (Vault needs it to reach KMS and S3 on startup).
 
@@ -118,6 +122,7 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 | [04-vault/server](04-vault/server) | `aws-infra/04-vault/server/terraform.tfstate` |
 | [04-vault/client](04-vault/client) | `aws-infra/04-vault/client/terraform.tfstate` |
 | [04-vault/bootstrap](04-vault/bootstrap) | `aws-infra/04-vault/bootstrap/terraform.tfstate` |
+| [05-dns-automation/record-manager](05-dns-automation/record-manager) | `aws-infra/05-dns-automation/record-manager/terraform.tfstate` |
 
 ---
 
@@ -143,7 +148,7 @@ Native S3 state locking via `use_lockfile = true` — no DynamoDB table required
 
 ### 02-networking
 
-Creates resources in east and west regions for core networking infrastructure.
+Creates resources in east and west regions for core networking infrastructure. See [Network Resources Diagram](#network-resources-diagram).
 
 ---
 
@@ -275,6 +280,8 @@ sudo iptables -t nat -L POSTROUTING -n -v
 
 ### core-dns
 
+See [Hosted Zones Diagram](#hosted-zones-diagram).
+
 Manages DNS for the `unixovich.net` domain. References the existing public hosted zone as a data source — the zone was created by Route53 Registrar and is intentionally not managed by Terraform so it survives `terraform destroy`. Creates private hosted zones for internal AWS resource discovery in each region. Publishes zone IDs and names to SSM in both regions.
 
 **Private zones:**
@@ -333,6 +340,8 @@ HashiCorp Vault for secrets management. Each sub-module groups resources by life
 ---
 
 ### server
+
+See [Vault Resources Diagram](#vault-resources-diagram).
 
 Deploys a single-node [HashiCorp Vault](https://developer.hashicorp.com/vault/docs) server in the east private subnet.
 
@@ -468,6 +477,8 @@ Use `make vault-bootstrap` — it handles the SSM tunnel automatically.
 
 ### client
 
+See [Vault Client Diagram](#vault-client-diagram).
+
 EC2 instance in the east private subnet with the Vault CLI pre-installed. Provides an interactive shell for running Vault commands without requiring a local SSM port-forwarding tunnel — connect via SSM Session Manager, source `/etc/profile.d/vault.sh`, and the CLI is ready to use.
 
 **Dependencies:**
@@ -496,6 +507,53 @@ source /etc/profile.d/vault.sh
 vault login
 vault secrets list
 ```
+
+---
+
+### 05-dns-automation
+
+Automated DNS registration for EC2 instances. Each module in this layer deploys Lambda functions that react to EC2 lifecycle events and manage Route53 records.
+
+---
+
+### record-manager
+
+See [DNS Automation Diagram](#dns-automation-diagram).
+
+Automatically creates and deletes Route53 private-zone A records as EC2 instances start and stop. Deployed in both regions — each Lambda handles events from its own region and resolves the correct private zone via SSM.
+
+> **NOTE — DNS opt-in tag:**
+> - Add `manage-r53-record = ""` to an EC2 instance resource in Terraform to opt in to automatic DNS registration.
+> - Instances without the `manage-r53-record` tag are silently skipped.
+> - The Lambda writes the resulting FQDN to a separate `fqdn` tag (not managed by Terraform) on first start, and reads it back on termination to delete the record.
+> - The instance must also have a `Name` tag — it is combined with the instance ID (without the `i-` prefix) to build a unique FQDN: `<Name>-<instance-id>.<private-zone-name>` (e.g. `vault-server-0abc1234567890def.use1.internal.unixovich.net`).
+> - On restart, if the `Name` tag has changed since last start, the old record is deleted before the new one is created.
+
+**Opt-in mechanism:** only instances tagged with `manage-r53-record` (any value) are processed. Instances without the tag are silently skipped. The Lambda writes the created FQDN to a separate `fqdn` tag (unmanaged by Terraform) so delete knows which record to remove. On restart, if the `Name` tag has changed, the old record is deleted before the new one is created — preventing stale records from accumulating.
+
+**Dependencies:**
+- Apply `02-networking/core-dns` before applying this module — the Lambda reads zone ID and name from SSM paths published by that module
+
+**Zone discovery:** the Lambda reads `AWS_REGION` (auto-injected by AWS) and queries SSM at runtime. No Terraform-injected environment variables are used — the same code resolves the correct private zone in both regions.
+
+**Lambda source:** `aws-infra/lambda/record-manager/handler.py` — packaged into a zip at plan time via `archive_file` and deployed to both regions.
+
+**Unit tests:** `aws-infra/lambda/record-manager/tests/` — run with `make test-record-manager`.
+
+**Resource types:** [aws_lambda_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function), [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role), [aws_iam_role_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment), [aws_iam_role_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy), [aws_cloudwatch_event_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule), [aws_cloudwatch_event_target](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target), [aws_lambda_permission](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_permission), [archive_file](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) (data source)
+
+**Resources:**
+- `aws_iam_role.record_manager` — Lambda execution role (IAM is global; shared by both regions)
+- `aws_iam_role_policy_attachment.logs` — CloudWatch Logs (`AWSLambdaBasicExecutionRole`)
+- `aws_iam_role_policy_attachment.route53` — Route53 A record management (`AmazonRoute53FullAccess`)
+- `aws_iam_role_policy_attachment.ec2_read` — describe instances and tags (`AmazonEC2ReadOnlyAccess`)
+- `aws_iam_role_policy_attachment.ssm_read` — read zone ID/name from SSM (`AmazonSSMReadOnlyAccess`)
+- `aws_iam_role_policy.ec2_tags` — inline `ec2:CreateTags` to write FQDN back to `fqdn` tag
+- `aws_cloudwatch_event_rule.ec2_state_east` / `ec2_state_west` — EventBridge rules firing on `running` and `shutting-down` state changes
+- `aws_cloudwatch_event_target.lambda_east` / `lambda_west` — routes events to the respective Lambda
+- `aws_lambda_permission.eventbridge_east` / `eventbridge_west` — resource-based policy granting EventBridge the right to invoke the Lambda
+- `aws_lambda_function.record_manager_east` — Lambda in us-east-1, Python 3.12, 30s timeout
+- `aws_lambda_function.record_manager_west` — Lambda in us-west-1, Python 3.12, 30s timeout
 
 ---
 
@@ -537,6 +595,11 @@ Examples:
 ```
 
 These parameters are region-scoped — querying the same path in `us-east-1` vs `us-west-1` returns the respective region's value. The hierarchy lets you query all parameters for a category or module with a single `get-parameters-by-path` call, e.g. `aws ssm get-parameters-by-path --path /tf/aws-infra/vault/ --recursive`. Add an `ssm_east.tf` / `ssm_west.tf` to any new module that produces values other tooling may need.
+
+**EC2 instance tag conventions:**
+
+- `Name` — required on every instance; used as the DNS label by the record-manager Lambda
+- `manage-r53-record = ""` — opt-in to automatic DNS registration; see the [record-manager](#record-manager) section for full details
 
 ---
 
@@ -650,6 +713,41 @@ graph LR
 
     PRIV_W -->|primary| VPC_W
     PRIV_E -.->|cross-region| VPC_W
+```
+
+---
+
+### DNS Automation Diagram
+
+Shows the `05-dns-automation/record-manager` flow. EventBridge rules in both regions fire on EC2 state changes. Each Lambda reads its private zone from SSM (using `AWS_REGION` to resolve the correct region's zone), then upserts or deletes the A record in Route53. On creation the Lambda writes the resulting FQDN to the `fqdn` tag so deletion can read it later.
+
+Same setup runs in both regions independently.
+
+```mermaid
+graph TD
+    INST[EC2 instance]
+    EVENT((EC2 state change))
+
+    subgraph region["us-east-1 · us-west-1"]
+        EB[EventBridge Rule]
+        L["dns-record-manager · Lambda"]
+    end
+
+    SSM[("SSM\nzone ID + name\nregion-scoped")]
+    R53["Route53\nprivate zones"]
+
+    ID["i-0abc1234\nName=vault-server"]
+    REC["vault-server-0abc1234.\nuse1.internal.unixovich.net"]
+
+    INST -->|"1. emits"| EVENT
+    EVENT -->|"2. state=running / shutting-down"| EB
+    EB -->|"3. invoke"| L
+    L -->|"4. check manage-r53-record tag"| INST
+    L -->|"5. read id + Name tag"| ID
+    L -->|"6. read zone name"| SSM
+    ID & SSM -->|"7. combine"| REC
+    REC -->|"8. upsert / delete A record"| R53
+    L -->|"9. write FQDN to fqdn tag"| INST
 ```
 
 ---
