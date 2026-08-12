@@ -14,6 +14,16 @@ INSTANCE_ID=$(aws ssm get-parameter \
   --query Parameter.Value --output text \
   --region "$REGION")
 
+INSTANCE_STATE=$(aws ec2 describe-instances \
+  --instance-ids "$INSTANCE_ID" \
+  --query 'Reservations[0].Instances[0].State.Name' --output text \
+  --region "$REGION" 2>/dev/null || echo "not-found")
+
+if [[ "$INSTANCE_STATE" != "running" ]]; then
+  echo "error: instance $INSTANCE_ID is not running (state: $INSTANCE_STATE)" >&2
+  exit 1
+fi
+
 COMMANDS_JSON=$(printf '%s\n' "${COMMANDS[@]}" | jq -R . | jq -sc '{"commands": .}')
 
 CMD_ID=$(aws ssm send-command \

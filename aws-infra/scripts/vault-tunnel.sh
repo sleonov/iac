@@ -12,6 +12,16 @@ INSTANCE_ID=$(aws ssm get-parameter \
   --query Parameter.Value --output text \
   --region "$REGION")
 
+INSTANCE_STATE=$(aws ec2 describe-instances \
+  --instance-ids "$INSTANCE_ID" \
+  --query 'Reservations[0].Instances[0].State.Name' --output text \
+  --region "$REGION" 2>/dev/null || echo "not-found")
+
+if [[ "$INSTANCE_STATE" != "running" ]]; then
+  echo "error: vault server $INSTANCE_ID is not running (state: $INSTANCE_STATE)" >&2
+  exit 1
+fi
+
 aws ssm start-session \
   --target "$INSTANCE_ID" \
   --document-name AWS-StartPortForwardingSession \
