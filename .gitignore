@@ -3,3 +3,7 @@
 
 # Generated Lambda deployment archives
 *.zip
+
+# Python
+__pycache__/
+*.pyc
