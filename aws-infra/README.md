@@ -27,7 +27,6 @@
     - [server](#server)
     - [bootstrap](#bootstrap)
     - [client](#client)
-
 - [New Module Bootstrap](#new-module-bootstrap)
 - [Diagrams](#diagrams)
   - [Network Resources Diagram](#network-resources-diagram)
@@ -119,8 +118,6 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 ---
 
 ## Modules
-
----
 
 ### 01-bootstrap
 
@@ -520,8 +517,6 @@ These parameters are region-scoped — querying the same path in `us-east-1` vs 
 ---
 
 ## Diagrams
-
----
 
 ### Network Resources Diagram
 
