@@ -1,2 +1,5 @@
 # IDE
 .idea/
+
+# Generated Lambda deployment archives
+*.zip
