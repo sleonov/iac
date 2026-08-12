@@ -17,6 +17,7 @@ Coverage:
     no private IP)
   - Happy path for state=running (A record upserted)
   - Happy path for state=shutting-down (A record deleted)
+  - Happy path for state=stopped (A record deleted — covers spot interruption)
   - Edge case: record not found on shutdown → warning logged, no exception
 """
 
@@ -149,6 +150,30 @@ def test_shutting_down_deletes_record(aws_setup):
 
     with patch('handler.get_instance', return_value=instance):
         handler.handler(make_event('shutting-down'), None)
+
+    records = r53.list_resource_record_sets(
+        HostedZoneId=zone_id
+    )['ResourceRecordSets']
+    a_records = [r for r in records if r['Type'] == 'A']
+    assert len(a_records) == 0
+
+
+def test_stopped_deletes_record(aws_setup):
+    zone_id = aws_setup['zone_id']
+    fqdn = f"vault-{SHORT_ID}.{ZONE_NAME}"
+    instance = make_instance()
+
+    r53 = boto3.client('route53')
+    r53.change_resource_record_sets(
+        HostedZoneId=zone_id,
+        ChangeBatch={'Changes': [{'Action': 'CREATE', 'ResourceRecordSet': {
+            'Name': fqdn, 'Type': 'A', 'TTL': 60,
+            'ResourceRecords': [{'Value': PRIVATE_IP}],
+        }}]},
+    )
+
+    with patch('handler.get_instance', return_value=instance):
+        handler.handler(make_event('stopped'), None)
 
     records = r53.list_resource_record_sets(
         HostedZoneId=zone_id

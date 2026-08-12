@@ -2,17 +2,19 @@
 # called CloudWatch Events and the Terraform resource names were never updated after the rebrand.
 # These resources are visible in the AWS console under EventBridge > Rules.
 
-# Rule: fires on EC2 instance state changes (running = instance started, shutting-down = instance stopping).
+# Rule: fires on EC2 instance state changes.
+# stopped covers persistent spot interruption (stop behavior) — spot instances
+# transition running→stopping→stopped, never through shutting-down.
 resource "aws_cloudwatch_event_rule" "ec2_state_west" {
   provider    = aws.west
   name        = "dns-record-manager-ec2-state"
-  description = "Trigger DNS record manager Lambda on EC2 instance start and shutdown"
+  description = "Trigger DNS record manager Lambda on EC2 instance start, shutdown, and stop"
 
   event_pattern = jsonencode({
     source        = ["aws.ec2"]
     "detail-type" = ["EC2 Instance State-change Notification"]
     detail = {
-      state = ["running", "shutting-down"]
+      state = ["running", "shutting-down", "stopped"]
     }
   })
 }
