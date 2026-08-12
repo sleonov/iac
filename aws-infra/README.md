@@ -21,6 +21,7 @@
     - [core-routing](#core-routing)
     - [core-security-groups](#core-security-groups)
     - [core-nat](#core-nat)
+    - [core-dns](#core-dns)
   - [03-iam](#03-iam)
     - [bastion](#bastion)
   - [04-vault](#04-vault)
@@ -30,6 +31,7 @@
 - [New Module Bootstrap](#new-module-bootstrap)
 - [Diagrams](#diagrams)
   - [Network Resources Diagram](#network-resources-diagram)
+  - [Hosted Zones Diagram](#hosted-zones-diagram)
   - [Vault Resources Diagram](#vault-resources-diagram)
   - [Vault Client Diagram](#vault-client-diagram)
 
@@ -61,9 +63,10 @@ For consumers outside the Terraform ecosystem — scripts, CI pipelines, applica
 | 4 | `03-iam/bastion` | — |
 | 5 | `02-networking/core-security-groups` | `core-vpcs` |
 | 6 | `02-networking/core-nat` *(optional)* | `core-vpcs`, `core-subnets`, `core-routing`, `03-iam/bastion` |
-| 7 | `04-vault/server` | `core-vpcs`, `core-subnets`; `core-nat` must be running |
-| 8 | `04-vault/bootstrap` | `04-vault/server` applied and initialized; use `make vault-bootstrap` |
-| 9 | `04-vault/client` | `core-vpcs`, `core-subnets`, `03-iam/bastion`, `04-vault/server`; `core-nat` must be running |
+| 7 | `02-networking/core-dns` | `core-vpcs` |
+| 8 | `04-vault/server` | `core-vpcs`, `core-subnets`; `core-nat` must be running |
+| 9 | `04-vault/bootstrap` | `04-vault/server` applied and initialized; use `make vault-bootstrap` |
+| 10 | `04-vault/client` | `core-vpcs`, `core-subnets`, `03-iam/bastion`, `04-vault/server`; `core-nat` must be running |
 
 `core-nat` is optional — only needed when workloads in private subnets require internet access. `04-vault/server` always requires `core-nat` to be running (Vault needs it to reach KMS and S3 on startup).
 
@@ -110,6 +113,7 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 | [02-networking/core-routing](02-networking/core-routing) | `aws-infra/02-networking/core-routing/terraform.tfstate` |
 | [02-networking/core-security-groups](02-networking/core-security-groups) | `aws-infra/02-networking/core-security-groups/terraform.tfstate` |
 | [02-networking/core-nat](02-networking/core-nat) | `aws-infra/02-networking/core-nat/terraform.tfstate` |
+| [02-networking/core-dns](02-networking/core-dns) | `aws-infra/02-networking/core-dns/terraform.tfstate` |
 | [03-iam/bastion](03-iam/bastion) | `aws-infra/03-iam/bastion/terraform.tfstate` |
 | [04-vault/server](04-vault/server) | `aws-infra/04-vault/server/terraform.tfstate` |
 | [04-vault/client](04-vault/client) | `aws-infra/04-vault/client/terraform.tfstate` |
@@ -266,6 +270,35 @@ sudo systemctl status fck-nat
 # Must show MASQUERADE rule on ens5
 sudo iptables -t nat -L POSTROUTING -n -v
 ```
+
+---
+
+### core-dns
+
+Manages DNS for the `unixovich.net` domain. References the existing public hosted zone as a data source — the zone was created by Route53 Registrar and is intentionally not managed by Terraform so it survives `terraform destroy`. Creates private hosted zones for internal AWS resource discovery in each region. Publishes zone IDs and names to SSM in both regions.
+
+**Private zones:**
+- `use1.internal.unixovich.net` — primary association with east VPC (`us-east-1`); also resolvable from west VPC via cross-region zone association
+- `usw1.internal.unixovich.net` — primary association with west VPC (`us-west-1`); also resolvable from east VPC via cross-region zone association
+
+Both zones are cross-associated with the opposite VPC using `aws_route53_zone_association`. The zone resources use `lifecycle { ignore_changes = [vpc] }` to avoid a known Terraform conflict where managing `vpc` blocks in the zone resource and via `aws_route53_zone_association` simultaneously causes Terraform to try to remove the cross-region associations on every plan.
+
+**Resource types:** [aws_route53_zone](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route53_zone), [aws_route53_zone (data source)](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/data-sources/route53_zone), [aws_route53_zone_association](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route53_zone_association), [aws_ssm_parameter](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ssm_parameter)
+
+**Resources:**
+- `aws_route53_zone.private_east` — private zone `use1.internal.unixovich.net`, primary association with east VPC
+- `aws_route53_zone.private_west` — private zone `usw1.internal.unixovich.net`, primary association with west VPC
+- `aws_route53_zone_association.private_east_to_west` — associates east zone with west VPC
+- `aws_route53_zone_association.private_west_to_east` — associates west zone with east VPC
+- `aws_ssm_parameter.public_zone_id` / `public_zone_name` — public zone details in us-east-1
+- `aws_ssm_parameter.private_zone_id_east` / `private_zone_name_east` — east private zone details in us-east-1
+- `aws_ssm_parameter.public_zone_id_west` / `public_zone_name_west` — public zone details in us-west-1
+- `aws_ssm_parameter.private_zone_id_west` / `private_zone_name_west` — west private zone details in us-west-1
+
+**Outputs:**
+- `public_zone_id`, `public_zone_name` — public hosted zone
+- `east_private_zone_id`, `east_private_zone_name` — east private zone
+- `west_private_zone_id`, `west_private_zone_name` — west private zone
 
 ---
 
@@ -575,6 +608,48 @@ graph TD
     RT_W_PRI --> PRI_W_A & PRI_W_B
     PRI_W_A & PRI_W_B --> NAT_W
     VPC_W --- DB_W_A & DB_W_B
+```
+
+---
+
+### Hosted Zones Diagram
+
+Shows the `02-networking/core-dns` hosted zones and their VPC associations. Each diagram shows which zones are resolvable from within that region's VPC. The public zone has no VPC associations — it sits in the Route53 global box to show it exists but has no lines connecting to the VPC. Solid lines are primary associations; dashed lines are cross-region associations.
+
+**us-east-1**
+
+```mermaid
+graph LR
+    subgraph r53["Route53 · global"]
+        PUB["unixovich.net · public"]
+        PRIV_E["use1.internal.unixovich.net · private"]
+        PRIV_W["usw1.internal.unixovich.net · private"]
+    end
+
+    subgraph east["us-east-1"]
+        VPC_E["vpc-east · 10.1.0.0/16"]
+    end
+
+    PRIV_E -->|primary| VPC_E
+    PRIV_W -.->|cross-region| VPC_E
+```
+
+**us-west-1**
+
+```mermaid
+graph LR
+    subgraph r53["Route53 · global"]
+        PUB["unixovich.net · public"]
+        PRIV_E["use1.internal.unixovich.net · private"]
+        PRIV_W["usw1.internal.unixovich.net · private"]
+    end
+
+    subgraph west["us-west-1"]
+        VPC_W["vpc-west · 10.10.0.0/16"]
+    end
+
+    PRIV_W -->|primary| VPC_W
+    PRIV_E -.->|cross-region| VPC_W
 ```
 
 ---
