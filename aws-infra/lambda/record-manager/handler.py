@@ -7,8 +7,10 @@ start and stop. Deployed by the Terraform module at:
 
 Trigger:
   EventBridge rule (aws_cloudwatch_event_rule) fires on EC2 state-change notifications
-  for states "running" and "shutting-down". The rule and Lambda are deployed in both
-  us-east-1 and us-west-1; the same handler code runs in both regions.
+  for states "running", "shutting-down", and "stopped". The rule and Lambda are deployed
+  in both us-east-1 and us-west-1; the same handler code runs in both regions.
+  "stopped" is needed for persistent spot instances — AWS interrupts them by stopping
+  (running→stopping→stopped), never through shutting-down.
 
 Opt-in mechanism:
   Only instances with the tag key "manage-r53-record" are processed. Instances
@@ -148,7 +150,9 @@ def handler(event, context):
         upsert_record(zone_id, fqdn, private_ip)
         logger.info(f"Created {fqdn} -> {private_ip}")
 
-    elif state == 'shutting-down':
+    elif state in ('shutting-down', 'stopped'):
+        # stopped covers persistent spot interruption: AWS stops (not terminates)
+        # the instance, so it never passes through shutting-down.
         fqdn = make_fqdn(name, instance_id, zone_name)
         try:
             delete_record(zone_id, fqdn, private_ip)

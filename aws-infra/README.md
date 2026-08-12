@@ -547,7 +547,7 @@ Automatically creates and deletes Route53 private-zone A records as EC2 instance
 - `aws_iam_role_policy_attachment.route53` — Route53 A record management (`AmazonRoute53FullAccess`)
 - `aws_iam_role_policy_attachment.ec2_read` — describe instances and tags (`AmazonEC2ReadOnlyAccess`)
 - `aws_iam_role_policy_attachment.ssm_read` — read zone ID/name from SSM (`AmazonSSMReadOnlyAccess`)
-- `aws_cloudwatch_event_rule.ec2_state_east` / `ec2_state_west` — EventBridge rules firing on `running` and `shutting-down` state changes
+- `aws_cloudwatch_event_rule.ec2_state_east` / `ec2_state_west` — EventBridge rules firing on `running`, `shutting-down`, and `stopped` state changes
 - `aws_cloudwatch_event_target.lambda_east` / `lambda_west` — routes events to the respective Lambda
 - `aws_lambda_permission.eventbridge_east` / `eventbridge_west` — resource-based policy granting EventBridge the right to invoke the Lambda
 - `aws_lambda_function.record_manager_east` — Lambda in us-east-1, Python 3.12, 30s timeout
@@ -717,7 +717,7 @@ graph LR
 
 ### DNS Automation Diagram
 
-Shows the `05-dns-automation/record-manager` flow. EventBridge rules in both regions fire on EC2 state changes. Each Lambda reads its private zone from SSM (using `AWS_REGION` to resolve the correct region's zone), then upserts or deletes the A record in Route53. On creation the Lambda writes the resulting FQDN to the `fqdn` tag so deletion can read it later.
+Shows the `05-dns-automation/record-manager` flow. EventBridge rules in both regions fire on EC2 state changes (`running`, `shutting-down`, `stopped`). Each Lambda reads its private zone from SSM (using `AWS_REGION` to resolve the correct region's zone), then upserts or deletes the A record in Route53. The FQDN is derived from the `Name` tag and instance ID — no state is stored on the instance.
 
 Same setup runs in both regions independently.
 
@@ -738,7 +738,7 @@ graph TD
     REC["vault-server-0abc1234.\nuse1.internal.unixovich.net"]
 
     INST -->|"1. emits"| EVENT
-    EVENT -->|"2. state=running / shutting-down"| EB
+    EVENT -->|"2. state=running / shutting-down / stopped"| EB
     EB -->|"3. invoke"| L
     L -->|"4. check manage-r53-record tag"| INST
     L -->|"5. read id + Name tag"| ID

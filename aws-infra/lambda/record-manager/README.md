@@ -51,7 +51,8 @@ pytest tests/ -v
 | `test_no_private_ip_skips` | Instance has no private IP → skipped |
 | `test_running_creates_record` | `state=running` → A record upserted in Route53 |
 | `test_shutting_down_deletes_record` | `state=shutting-down` → existing A record removed from Route53 |
-| `test_shutting_down_record_not_found_warns` | `state=shutting-down` but no A record exists → warning logged, no exception |
+| `test_stopped_deletes_record` | `state=stopped` → existing A record removed (covers spot interruption) |
+| `test_shutting_down_record_not_found_warns` | record not found on shutdown → warning logged, no exception |
 
 ---
 
