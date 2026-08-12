@@ -1,5 +1,5 @@
 # Targets are independent — run them individually in the order documented in README.md.
-# Apply order: core-vpcs → core-subnets → core-routing → core-security-groups → iam-bastion → core-nat → vault-server → vault-bootstrap → vault-client
+# Apply order: core-vpcs → core-subnets → core-routing → core-security-groups → iam-bastion → core-nat → core-dns → vault-server → vault-bootstrap → vault-client
 # Requires AWS_PROFILE to be set: export AWS_PROFILE=<your-profile>
 
 AWS_REGION ?= us-east-1
@@ -15,10 +15,11 @@ TF_COMMAND   = $(if $(DESTROY),destroy -auto-approve,$(if $(PLAN),plan,apply -au
 .DEFAULT_GOAL := help
 
 .PHONY: help core-vpcs core-subnets core-routing core-security-groups core-nat core-nat-status \
-	iam-bastion vault-server vault-bootstrap vault-status vault-client
+	core-dns iam-bastion vault-server vault-bootstrap vault-status vault-client
 
 help:
-	@echo "Usage: make <target> [DESTROY=1] [AWS_REGION=us-east-1]"
+	@echo "Usage: make <target> [PLAN=1] [DESTROY=1] [AWS_REGION=us-east-1]"
+	@echo "  Default action is apply. Use PLAN=1 to plan, DESTROY=1 to destroy."
 	@echo ""
 	@echo "Targets:"
 	@echo "  core-vpcs            02-networking/core-vpcs"
@@ -27,6 +28,7 @@ help:
 	@echo "  core-security-groups 02-networking/core-security-groups"
 	@echo "  core-nat             02-networking/core-nat"
 	@echo "  core-nat-status      check NAT instance iptables and service status via SSM"
+	@echo "  core-dns             02-networking/core-dns"
 	@echo "  iam-bastion          03-iam/bastion"
 	@echo "  vault-server         04-vault/server"
 	@echo "  vault-bootstrap      04-vault/bootstrap  (manages SSM tunnel automatically)"
@@ -51,6 +53,9 @@ core-security-groups:
 
 core-nat:
 	cd 02-networking/core-nat && terraform init && terraform $(TF_COMMAND)
+
+core-dns:
+	cd 02-networking/core-dns && terraform init && terraform $(TF_COMMAND)
 
 # core-nat-status: runs fck-nat service status and iptables check via scripts/ssm-run.sh
 core-nat-status:
