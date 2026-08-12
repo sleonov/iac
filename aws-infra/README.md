@@ -62,7 +62,7 @@ For consumers outside the Terraform ecosystem — scripts, CI pipelines, applica
 | 5 | `02-networking/core-security-groups` | `core-vpcs` |
 | 6 | `02-networking/core-nat` *(optional)* | `core-vpcs`, `core-subnets`, `core-routing`, `03-iam/bastion` |
 | 7 | `04-vault/server` | `core-vpcs`, `core-subnets`; `core-nat` must be running |
-| 8 | `04-vault/bootstrap` | `04-vault/server` applied and initialized; SSM port forwarding active |
+| 8 | `04-vault/bootstrap` | `04-vault/server` applied and initialized; use `make vault-bootstrap` |
 | 9 | `04-vault/client` | `core-vpcs`, `core-subnets`, `03-iam/bastion`, `04-vault/server`; `core-nat` must be running |
 
 `core-nat` is optional — only needed when workloads in private subnets require internet access. `04-vault/server` always requires `core-nat` to be running (Vault needs it to reach KMS and S3 on startup).
@@ -412,17 +412,8 @@ Configures Vault after initialization using the [Vault Terraform provider](https
 
 **Dependencies:**
 - `04-vault/server` must be applied and Vault must be fully initialized (secret at `vault/init` must exist)
-- SSM port forwarding must be active before running `terraform apply` — Vault is in a private subnet
 
-**Before applying:**
-
-```bash
-# Start SSM tunnel (keep running in a separate terminal)
-aws ssm start-session \
-  --target $(aws ssm get-parameter --name /tf/aws-infra/vault/server/instance-id --query Parameter.Value --output text --region us-east-1) \
-  --document-name AWS-StartPortForwardingSession \
-  --parameters portNumber=8200,localPortNumber=8200
-```
+Use `make vault-bootstrap` — it handles the SSM tunnel automatically.
 
 **Providers:** AWS + [Vault](https://registry.terraform.io/providers/hashicorp/vault/latest) (`>=4.0.0`). The Vault provider authenticates with the root token read from Secrets Manager at plan/apply time.
 
