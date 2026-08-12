@@ -8,9 +8,6 @@
 #                                 uses AWS_REGION (injected automatically by AWS) to query SSM in
 #                                 its own region, so the same code resolves the correct zone in
 #                                 both us-east-1 and us-west-1 without any Terraform-injected config
-#   ec2:CreateTags (inline)     — write the created FQDN back to the r53-record tag on the instance;
-#                                 no AWS managed policy covers CreateTags without granting broad EC2
-#                                 write access, so a narrow inline policy is used instead.
 
 resource "aws_iam_role" "record_manager" {
   provider = aws.east
@@ -50,17 +47,3 @@ resource "aws_iam_role_policy_attachment" "ssm_read" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess"
 }
 
-resource "aws_iam_role_policy" "ec2_tags" {
-  provider = aws.east
-  role     = aws_iam_role.record_manager.name
-  name     = "ec2-create-tags"
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "ec2:CreateTags"
-      Resource = "arn:aws:ec2:*:*:instance/*"
-    }]
-  })
-}

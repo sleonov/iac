@@ -49,9 +49,9 @@ pytest tests/ -v
 | `test_no_manage_r53_tag_skips` | Instance has no `manage-r53-record` tag → skipped (opt-in not set) |
 | `test_no_name_tag_skips` | Instance has no `Name` tag → skipped (no label to build FQDN) |
 | `test_no_private_ip_skips` | Instance has no private IP → skipped |
-| `test_running_creates_record` | `state=running` → A record created in Route53, FQDN written to `fqdn` tag |
+| `test_running_creates_record` | `state=running` → A record upserted in Route53 |
 | `test_shutting_down_deletes_record` | `state=shutting-down` → existing A record removed from Route53 |
-| `test_shutting_down_no_fqdn_tag_skips` | `fqdn` tag absent (Lambda never ran on start) → delete skipped |
+| `test_shutting_down_record_not_found_warns` | `state=shutting-down` but no A record exists → warning logged, no exception |
 
 ---
 

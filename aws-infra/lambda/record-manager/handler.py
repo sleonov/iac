@@ -14,11 +14,6 @@ Opt-in mechanism:
   Only instances with the tag key "manage-r53-record" are processed. Instances
   without it are silently skipped.
 
-DNS state tag:
-  On creation, Lambda writes the resulting FQDN to a separate "fqdn" tag on the
-  instance. On deletion, Lambda reads it back to know which record to remove.
-  This tag is not declared in Terraform, so Terraform will never overwrite it.
-
 Zone discovery:
   The Lambda reads the hosted zone ID and zone name from SSM Parameter Store at
   runtime using AWS_REGION (auto-injected by AWS). The SSM paths below store
@@ -35,6 +30,7 @@ Prerequisites:
 import boto3
 import logging
 import os
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -118,14 +114,6 @@ def delete_record(zone_id, fqdn, ip):
     )
 
 
-def tag_instance(instance_id, fqdn):
-    # Write the created FQDN back to the instance so delete can read it later
-    # without having to reconstruct the zone name.
-    ec2.create_tags(
-        Resources=[instance_id],
-        Tags=[{'Key': 'fqdn', 'Value': fqdn}]
-    )
-
 
 def handler(event, context):
     instance_id = event['detail']['instance-id']
@@ -157,22 +145,16 @@ def handler(event, context):
 
     if state == 'running':
         fqdn = make_fqdn(name, instance_id, zone_name)
-        # If the Name tag changed since last start, the old record would be
-        # orphaned — delete it before creating the new one.
-        old_fqdn = get_tag(instance, 'fqdn')
-        if old_fqdn and old_fqdn != fqdn:
-            delete_record(zone_id, old_fqdn, private_ip)
-            logger.info(f"Deleted stale record {old_fqdn}")
         upsert_record(zone_id, fqdn, private_ip)
-        tag_instance(instance_id, fqdn)
         logger.info(f"Created {fqdn} -> {private_ip}")
 
     elif state == 'shutting-down':
-        # Read FQDN from the tag written at creation time — avoids reconstructing
-        # the zone name and handles any name changes that may have occurred.
-        fqdn = get_tag(instance, 'fqdn')
-        if not fqdn:
-            logger.warning(f"Instance {instance_id} fqdn tag is empty, skipping delete")
-            return
-        delete_record(zone_id, fqdn, private_ip)
-        logger.info(f"Deleted {fqdn}")
+        fqdn = make_fqdn(name, instance_id, zone_name)
+        try:
+            delete_record(zone_id, fqdn, private_ip)
+            logger.info(f"Deleted {fqdn}")
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'InvalidChangeBatch':
+                logger.warning(f"Record {fqdn} not found, skipping delete")
+            else:
+                raise

@@ -6,8 +6,8 @@ Approach:
     hosted zone, captures its moto-generated ID, and stores it in SSM under
     the same path the handler reads at runtime. This lets get_zone() resolve
     correctly and allows Route53 assertions to verify real mocked state.
-  - EC2 calls (get_instance, tag_instance) are patched with unittest.mock to
-    avoid the complexity of creating mocked EC2 instances in moto.
+  - EC2 calls (get_instance) are patched with unittest.mock to avoid the
+    complexity of creating mocked EC2 instances in moto.
   - Module-level boto3 clients in handler.py are created before mock_aws()
     starts, but moto intercepts at the botocore transport layer so all calls
     within the mock context are captured.
@@ -15,15 +15,14 @@ Approach:
 Coverage:
   - All four skip conditions (no instance, no manage-r53-record tag, no Name tag,
     no private IP)
-  - Happy path for state=running (record created, fqdn tag written)
-  - Happy path for state=shutting-down (record deleted)
-  - Edge case: fqdn tag absent → delete skipped
-  - Edge case: Name tag changed since last start → stale record deleted before
-    new one is created
+  - Happy path for state=running (A record upserted)
+  - Happy path for state=shutting-down (A record deleted)
+  - Edge case: record not found on shutdown → warning logged, no exception
 """
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 from unittest.mock import patch
 
@@ -116,12 +115,10 @@ def test_running_creates_record(aws_setup):
     zone_id = aws_setup['zone_id']
     instance = make_instance()
 
-    with patch('handler.get_instance', return_value=instance), \
-         patch('handler.tag_instance') as mock_tag:
+    with patch('handler.get_instance', return_value=instance):
         handler.handler(make_event('running'), None)
 
     fqdn = f"vault-{SHORT_ID}.{ZONE_NAME}"
-    mock_tag.assert_called_once_with(INSTANCE_ID, fqdn)
 
     r53 = boto3.client('route53')
     records = r53.list_resource_record_sets(
@@ -138,11 +135,7 @@ def test_running_creates_record(aws_setup):
 def test_shutting_down_deletes_record(aws_setup):
     zone_id = aws_setup['zone_id']
     fqdn = f"vault-{SHORT_ID}.{ZONE_NAME}"
-    instance = make_instance(tags=[
-        {'Key': 'Name', 'Value': 'vault'},
-        {'Key': 'manage-r53-record', 'Value': ''},
-        {'Key': 'fqdn', 'Value': fqdn},
-    ])
+    instance = make_instance()
 
     # Pre-create the record so the handler has something to delete.
     r53 = boto3.client('route53')
@@ -164,44 +157,14 @@ def test_shutting_down_deletes_record(aws_setup):
     assert len(a_records) == 0
 
 
-def test_running_deletes_stale_record_on_rename(aws_setup):
-    zone_id = aws_setup['zone_id']
-    old_fqdn = f"vault-{SHORT_ID}.{ZONE_NAME}"
-    new_fqdn = f"vault2-{SHORT_ID}.{ZONE_NAME}"
-
-    # Instance was previously named "vault"; now Name tag is "vault2".
-    instance = make_instance(tags=[
-        {'Key': 'Name', 'Value': 'vault2'},
-        {'Key': 'manage-r53-record', 'Value': ''},
-        {'Key': 'fqdn', 'Value': old_fqdn},
-    ])
-
-    # Pre-create the old record.
-    r53 = boto3.client('route53')
-    r53.change_resource_record_sets(
-        HostedZoneId=zone_id,
-        ChangeBatch={'Changes': [{'Action': 'CREATE', 'ResourceRecordSet': {
-            'Name': old_fqdn, 'Type': 'A', 'TTL': 60,
-            'ResourceRecords': [{'Value': PRIVATE_IP}],
-        }}]},
-    )
-
-    with patch('handler.get_instance', return_value=instance), \
-         patch('handler.tag_instance'):
-        handler.handler(make_event('running'), None)
-
-    records = r53.list_resource_record_sets(
-        HostedZoneId=zone_id
-    )['ResourceRecordSets']
-    a_records = [r for r in records if r['Type'] == 'A']
-    assert len(a_records) == 1
-    assert a_records[0]['Name'] == f"{new_fqdn}."
-
-
-def test_shutting_down_no_fqdn_tag_skips(aws_setup):
-    # fqdn tag absent (Lambda never ran on start) — delete should be skipped.
+def test_shutting_down_record_not_found_warns(aws_setup):
+    # Lambda fires on shutting-down but no A record exists (e.g. Lambda never
+    # ran on start) — should log a warning and not raise.
     instance = make_instance()
+    error = ClientError(
+        {'Error': {'Code': 'InvalidChangeBatch', 'Message': 'not found'}},
+        'ChangeResourceRecordSets',
+    )
     with patch('handler.get_instance', return_value=instance), \
-         patch('handler.delete_record') as mock_delete:
+         patch('handler.delete_record', side_effect=error):
         handler.handler(make_event('shutting-down'), None)
-        mock_delete.assert_not_called()
