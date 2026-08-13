@@ -24,7 +24,7 @@ record-manager/
 ## Testing
 
 Tests use [moto](https://docs.getmoto.org/) to mock Route53 and SSM, and
-`unittest.mock.patch` for EC2 calls (`get_instance`, `tag_instance`) to avoid
+`unittest.mock.patch` for EC2 calls (`get_instance`) to avoid
 the complexity of spinning up mocked EC2 instances.
 
 **Install dependencies**
