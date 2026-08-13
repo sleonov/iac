@@ -30,11 +30,13 @@
     - [client](#client)
   - [05-dns-automation](#05-dns-automation)
     - [record-manager](#record-manager)
+    - [record-reaper](#record-reaper)
 - [New Module Bootstrap](#new-module-bootstrap)
 - [Diagrams](#diagrams)
   - [Network Resources Diagram](#network-resources-diagram)
   - [Hosted Zones Diagram](#hosted-zones-diagram)
   - [DNS Automation Diagram](#dns-automation-diagram)
+  - [DNS Reaper Diagram](#dns-reaper-diagram)
   - [Vault Resources Diagram](#vault-resources-diagram)
   - [Vault Client Diagram](#vault-client-diagram)
 
@@ -68,9 +70,10 @@ For consumers outside the Terraform ecosystem — scripts, CI pipelines, applica
 | 6 | `02-networking/core-nat` *(optional)* | `core-vpcs`, `core-subnets`, `core-routing`, `03-iam/bastion` |
 | 7 | `02-networking/core-dns` | `core-vpcs` |
 | 8 | `05-dns-automation/record-manager` | `core-dns` |
-| 9 | `04-vault/server` | `core-vpcs`, `core-subnets`; `core-nat` must be running |
-| 10 | `04-vault/bootstrap` | `04-vault/server` applied and initialized; use `make vault-bootstrap` |
-| 11 | `04-vault/client` | `core-vpcs`, `core-subnets`, `03-iam/bastion`, `04-vault/server`; `core-nat` must be running |
+| 9 | `05-dns-automation/record-reaper` | `core-dns` |
+| 10 | `04-vault/server` | `core-vpcs`, `core-subnets`; `core-nat` must be running |
+| 11 | `04-vault/bootstrap` | `04-vault/server` applied and initialized; use `make vault-bootstrap` |
+| 12 | `04-vault/client` | `core-vpcs`, `core-subnets`, `03-iam/bastion`, `04-vault/server`; `core-nat` must be running |
 
 `core-nat` is optional — only needed when workloads in private subnets require internet access. `04-vault/server` always requires `core-nat` to be running (Vault needs it to reach KMS and S3 on startup).
 
@@ -123,6 +126,7 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 | [04-vault/client](04-vault/client) | `aws-infra/04-vault/client/terraform.tfstate` |
 | [04-vault/bootstrap](04-vault/bootstrap) | `aws-infra/04-vault/bootstrap/terraform.tfstate` |
 | [05-dns-automation/record-manager](05-dns-automation/record-manager) | `aws-infra/05-dns-automation/record-manager/terraform.tfstate` |
+| [05-dns-automation/record-reaper](05-dns-automation/record-reaper) | `aws-infra/05-dns-automation/record-reaper/terraform.tfstate` |
 
 ---
 
@@ -553,6 +557,35 @@ Automatically creates and deletes Route53 private-zone A records as EC2 instance
 - `aws_lambda_function.record_manager_east` — Lambda in us-east-1, Python 3.12, 30s timeout
 - `aws_lambda_function.record_manager_west` — Lambda in us-west-1, Python 3.12, 30s timeout
 
+### record-reaper
+
+Safety net for `record-manager`: periodically scans the private hosted zone and deletes any A records whose owning instance is no longer running with the `manage-r53-record` tag. Covers cases where `record-manager` missed a deletion — Lambda error, instance terminated directly via API, or the `manage-r53-record` tag removed post-creation.
+
+**Dependencies:**
+- Apply `02-networking/core-dns` before applying this module — the Lambda reads zone ID and name from SSM paths published by that module
+
+**Trigger:** EventBridge scheduled rule — runs hourly in each region.
+
+**Logic:** builds the set of running EC2 instances with `manage-r53-record` tag → lists all A records in the private zone → reconstructs the instance ID from each record name → deletes records with no matching running+opted-in instance.
+
+**Lambda source:** `aws-infra/lambda/record-reaper/handler.py` — packaged into a zip at plan time via `archive_file` and deployed to both regions.
+
+**Unit tests:** `aws-infra/lambda/record-reaper/tests/` — run with `make test-record-reaper`.
+
+**Resource types:** [aws_lambda_function](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_function), [aws_iam_role](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role), [aws_iam_role_policy_attachment](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment), [aws_cloudwatch_event_rule](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_rule), [aws_cloudwatch_event_target](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/cloudwatch_event_target), [aws_lambda_permission](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lambda_permission), [archive_file](https://registry.terraform.io/providers/hashicorp/archive/latest/docs/data-sources/file) (data source)
+
+**Resources:**
+- `aws_iam_role.record_reaper` — Lambda execution role (IAM is global; shared by both regions)
+- `aws_iam_role_policy_attachment.logs` — CloudWatch Logs (`AWSLambdaBasicExecutionRole`)
+- `aws_iam_role_policy_attachment.route53` — Route53 A record deletion (`AmazonRoute53FullAccess`)
+- `aws_iam_role_policy_attachment.ec2_read` — describe instances and tags (`AmazonEC2ReadOnlyAccess`)
+- `aws_iam_role_policy_attachment.ssm_read` — read zone ID/name from SSM (`AmazonSSMReadOnlyAccess`)
+- `aws_cloudwatch_event_rule.record_reaper_east` / `record_reaper_west` — hourly scheduled EventBridge rules
+- `aws_cloudwatch_event_target.record_reaper_east` / `record_reaper_west` — routes schedule events to the respective Lambda
+- `aws_lambda_permission.eventbridge_east` / `eventbridge_west` — resource-based policy granting EventBridge the right to invoke the Lambda
+- `aws_lambda_function.record_reaper_east` — Lambda in us-east-1, Python 3.12, 60s timeout
+- `aws_lambda_function.record_reaper_west` — Lambda in us-west-1, Python 3.12, 60s timeout
+
 ---
 
 ## New Module Bootstrap
@@ -717,9 +750,9 @@ graph LR
 
 ### DNS Automation Diagram
 
-Shows the `05-dns-automation/record-manager` flow. EventBridge rules in both regions fire on EC2 state changes (`running`, `shutting-down`, `stopped`). Each Lambda reads its private zone from SSM (using `AWS_REGION` to resolve the correct region's zone), then upserts or deletes the A record in Route53. The FQDN is derived from the `Name` tag and instance ID — no state is stored on the instance.
+Shows the `05-dns-automation` flow. Both modules run independently in each region and share the same SSM zone discovery pattern.
 
-Same setup runs in both regions independently.
+**record-manager** — event-driven: EventBridge fires on EC2 state changes (`running`, `shutting-down`, `stopped`), upserts or deletes the A record immediately.
 
 ```mermaid
 graph TD
@@ -745,6 +778,31 @@ graph TD
     L -->|"6. read zone name"| SSM
     ID & SSM -->|"7. combine"| REC
     REC -->|"8. upsert / delete A record"| R53
+```
+
+
+---
+
+### DNS Reaper Diagram
+
+Shows the `05-dns-automation/record-reaper` flow. Runs hourly in each region, cross-references all A records in the private zone against running+opted-in instances, and deletes any orphans missed by `record-manager`.
+
+```mermaid
+graph TD
+    subgraph region["us-east-1 · us-west-1"]
+        SCHED((hourly schedule))
+        L["dns-record-reaper · Lambda"]
+    end
+
+    EC2["EC2\nrunning instances\nwith manage-r53-record tag"]
+    SSM[("SSM\nzone ID + name\nregion-scoped")]
+    R53["Route53\nprivate zones"]
+
+    SCHED -->|"1. invoke"| L
+    L -->|"2. list running+opted-in"| EC2
+    L -->|"3. read zone"| SSM
+    L -->|"4. list all A records"| R53
+    L -->|"5. delete orphaned records"| R53
 ```
 
 ---

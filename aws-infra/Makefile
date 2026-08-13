@@ -1,5 +1,5 @@
 # Targets are independent — run them individually in the order documented in README.md.
-# Apply order: core-vpcs → core-subnets → core-routing → core-security-groups → iam-bastion → core-nat → core-dns → record-manager → vault-server → vault-bootstrap → vault-client
+# Apply order: core-vpcs → core-subnets → core-routing → core-security-groups → iam-bastion → core-nat → core-dns → record-manager → record-reaper → vault-server → vault-bootstrap → vault-client
 # Requires AWS_PROFILE to be set: export AWS_PROFILE=<your-profile>
 
 AWS_REGION ?= us-east-1
@@ -16,7 +16,7 @@ TF_COMMAND   = $(if $(DESTROY),destroy -auto-approve,$(if $(PLAN),plan,apply -au
 
 .PHONY: help core-vpcs core-subnets core-routing core-security-groups core-nat core-nat-status \
 	core-dns iam-bastion vault-server vault-bootstrap vault-status vault-client \
-	record-manager test-record-manager
+	record-manager record-reaper test-record-manager test-record-reaper
 
 help:
 	@echo "Usage: make <target> [PLAN=1] [DESTROY=1] [AWS_REGION=us-east-1]"
@@ -34,6 +34,7 @@ help:
 	@echo "  vault-bootstrap      04-vault/bootstrap  (manages SSM tunnel automatically)"
 	@echo "  vault-client         04-vault/client"
 	@echo "  record-manager       05-dns-automation/record-manager"
+	@echo "  record-reaper        05-dns-automation/record-reaper"
 	@echo ""
 	@echo "Infrastructure tests:"
 	@echo "  core-nat-status      check NAT instance iptables and service status via SSM"
@@ -41,6 +42,7 @@ help:
 	@echo ""
 	@echo "Code tests:"
 	@echo "  test-record-manager  record-manager Lambda unit tests"
+	@echo "  test-record-reaper   record-reaper Lambda unit tests"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make vault-server"
@@ -92,3 +94,9 @@ record-manager:
 
 test-record-manager:
 	cd lambda/record-manager && pip install -q -r requirements-test.txt && pytest tests/ -v
+
+record-reaper:
+	cd 05-dns-automation/record-reaper && terraform init && terraform $(TF_COMMAND)
+
+test-record-reaper:
+	cd lambda/record-reaper && pip install -q -r requirements-test.txt && pytest tests/ -v
