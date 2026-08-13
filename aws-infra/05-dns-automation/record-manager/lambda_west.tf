@@ -7,5 +7,5 @@ resource "aws_lambda_function" "record_manager_west" {
   handler          = "handler.handler"
   filename         = data.archive_file.record_manager.output_path
   source_code_hash = data.archive_file.record_manager.output_base64sha256
-  timeout = 30
+  timeout          = 30
 }
