@@ -79,9 +79,11 @@ For consumers outside the Terraform ecosystem — scripts, CI pipelines, applica
 
 **Applying modules:**
 
-For each module: `cd <module-dir> && terraform init && terraform apply`
+For each module: `cd <module-dir> && terraform init -backend-config=../../backend.hcl && terraform apply`
 
-A `Makefile` at the root of `aws-infra/` provides shorthand targets for each module. The `vault-bootstrap` target also handles the SSM tunnel automatically.
+The shared S3 backend configuration (`bucket`, `region`, `encrypt`, `use_lockfile`) lives in `aws-infra/backend.hcl`. Each module's `terraform.tf` only contains the unique state `key`. The `-backend-config` flag merges the two at init time — omitting it causes Terraform to prompt for the missing backend attributes interactively.
+
+A `Makefile` at the root of `aws-infra/` provides shorthand targets for each module and passes `-backend-config` automatically. The `vault-bootstrap` target also handles the SSM tunnel automatically.
 
 - `make vault-server` — apply
 - `make vault-server PLAN=1` — plan
@@ -135,6 +137,12 @@ All modules store state in S3 bucket `terraform-state-607527010331`. It is creat
 ### 01-bootstrap
 
 Native S3 state locking via `use_lockfile = true` — no DynamoDB table required.
+
+After applying this module, update `aws-infra/backend.hcl` with the bucket name before running `terraform init` on any other module:
+
+```bash
+terraform output -raw state_bucket_name
+```
 
 **Resource types:** [aws_s3_bucket](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket), [aws_s3_bucket_versioning](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_versioning), [aws_s3_bucket_server_side_encryption_configuration](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_server_side_encryption_configuration), [aws_s3_bucket_public_access_block](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block)
 
@@ -590,7 +598,7 @@ Safety net for `record-manager`: periodically scans the private hosted zone and 
 
 ## New Module Bootstrap
 
-Copy files from `module_skel/` into the new module directory and replace the `<module-path>` placeholders in `locals.tf` and `terraform.tf` with the module's relative path (e.g. `02-networking/core-vpcs`).
+Copy files from `module_skel/` into the new module directory and replace the `<module-path>` placeholders in `locals.tf` and `terraform.tf` with the module's relative path (e.g. `02-networking/core-vpcs`). Add a target to the `Makefile` following the existing pattern — `terraform init -backend-config=../../backend.hcl` is already wired in every target so the shared backend config is picked up automatically.
 
 **Variable defaults:** All variables across all modules have defaults. No `terraform.tfvars` files are used — this is a demo project and the defaults reflect the intended configuration. Override via `-var` on the CLI if needed.
 

@@ -49,22 +49,22 @@ help:
 	@echo "  make vault-server DESTROY=1"
 
 core-vpcs:
-	cd 02-networking/core-vpcs && terraform init && terraform $(TF_COMMAND)
+	cd 02-networking/core-vpcs && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 core-subnets:
-	cd 02-networking/core-subnets && terraform init && terraform $(TF_COMMAND)
+	cd 02-networking/core-subnets && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 core-routing:
-	cd 02-networking/core-routing && terraform init && terraform $(TF_COMMAND)
+	cd 02-networking/core-routing && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 core-security-groups:
-	cd 02-networking/core-security-groups && terraform init && terraform $(TF_COMMAND)
+	cd 02-networking/core-security-groups && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 core-nat:
-	cd 02-networking/core-nat && terraform init && terraform $(TF_COMMAND)
+	cd 02-networking/core-nat && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 core-dns:
-	cd 02-networking/core-dns && terraform init && terraform $(TF_COMMAND)
+	cd 02-networking/core-dns && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 # core-nat-status: runs fck-nat service status and iptables check via scripts/ssm-run.sh
 core-nat-status:
@@ -73,30 +73,30 @@ core-nat-status:
 		"iptables -t nat -L POSTROUTING -n -v"
 
 iam-bastion:
-	cd 03-iam/bastion && terraform init && terraform $(TF_COMMAND)
+	cd 03-iam/bastion && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 vault-server:
-	cd 04-vault/server && terraform init && terraform $(TF_COMMAND)
+	cd 04-vault/server && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 # vault-bootstrap: tunnel setup/teardown is handled by scripts/vault-tunnel.sh
 vault-bootstrap:
-	@scripts/vault-tunnel.sh $(AWS_REGION) "cd 04-vault/bootstrap && terraform init && terraform $(TF_COMMAND)"
+	@scripts/vault-tunnel.sh $(AWS_REGION) "cd 04-vault/bootstrap && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)"
 
 # vault-status: tunnel setup/teardown is handled by scripts/vault-tunnel.sh
 vault-status:
 	@scripts/vault-tunnel.sh $(AWS_REGION) "VAULT_ADDR=http://127.0.0.1:8200 vault status"
 
 vault-client:
-	cd 04-vault/client && terraform init && terraform $(TF_COMMAND)
+	cd 04-vault/client && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 record-manager:
-	cd 05-dns-automation/record-manager && terraform init && terraform $(TF_COMMAND)
+	cd 05-dns-automation/record-manager && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 test-record-manager:
 	cd lambda/record-manager && pip install -q -r requirements-test.txt && pytest tests/ -v
 
 record-reaper:
-	cd 05-dns-automation/record-reaper && terraform init && terraform $(TF_COMMAND)
+	cd 05-dns-automation/record-reaper && terraform init -backend-config=../../backend.hcl && terraform $(TF_COMMAND)
 
 test-record-reaper:
 	cd lambda/record-reaper && pip install -q -r requirements-test.txt && pytest tests/ -v

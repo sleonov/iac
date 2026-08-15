@@ -9,10 +9,6 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "terraform-state-607527010331"
-    key          = "<module-path>/terraform.tfstate" # e.g. "aws-infra/02-networking/core-vpcs/terraform.tfstate"
-    region       = "us-east-1"
-    use_lockfile = true
-    encrypt      = true
+    key = "<module-path>/terraform.tfstate" # e.g. "aws-infra/02-networking/core-vpcs/terraform.tfstate"
   }
 }
