@@ -2,6 +2,7 @@
 # Plan will fail if any of these modules have not been applied yet.
 
 data "aws_ami" "amazon_linux_2023" {
+  provider    = aws.east
   most_recent = true
   owners      = ["amazon"]
 

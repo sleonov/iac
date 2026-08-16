@@ -109,6 +109,10 @@ All modules use the [AWS Terraform provider](https://registry.terraform.io/provi
 - [Documentation](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [GitHub](https://github.com/hashicorp/terraform-provider-aws)
 
+All modules declare two aliased providers — `aws.east` (`var.east_region`, default `us-east-1`) and `aws.west` (`var.west_region`, default `us-west-1`). Every `resource` and `data` block explicitly sets `provider = aws.east` or `provider = aws.west`; there is no default (unaliased) provider. Both providers are declared even if a given module only deploys resources in one region — this keeps provider configuration uniform across all modules.
+
+The canonical provider configuration lives in `shared/providers.tf`. Each module's `providers.tf` is a symlink pointing there — editing `shared/providers.tf` updates all modules at once. The one exception is `04-vault/bootstrap`, which keeps its own `providers.tf` because it also configures the Vault provider.
+
 ---
 
 ## Remote State
@@ -599,6 +603,16 @@ Safety net for `record-manager`: periodically scans the private hosted zone and 
 ## New Module Bootstrap
 
 Copy files from `module_skel/` into the new module directory and replace the `<module-path>` placeholders in `locals.tf` and `terraform.tf` with the module's relative path (e.g. `02-networking/core-vpcs`). Add a target to the `Makefile` following the existing pattern — `terraform init -backend-config=../../backend.hcl` is already wired in every target so the shared backend config is picked up automatically.
+
+The `providers.tf` in `module_skel/` is already a symlink to `../shared/providers.tf`. When copying the skeleton, the symlink is preserved — but only if the new module sits at the same depth as `module_skel/` (one level below `aws-infra/`). For depth-2 modules (e.g. `02-networking/core-vpcs/`), recreate the symlink with the correct relative path after copying:
+
+```bash
+# depth-1 module (e.g. 06-foo/):
+ln -s ../shared/providers.tf providers.tf
+
+# depth-2 module (e.g. 06-foo/bar/):
+ln -s ../../shared/providers.tf providers.tf
+```
 
 **Variable defaults:** All variables across all modules have defaults. No `terraform.tfvars` files are used — this is a demo project and the defaults reflect the intended configuration. Override via `-var` on the CLI if needed.
 

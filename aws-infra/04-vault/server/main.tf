@@ -1,9 +1,12 @@
 # Requires core-vpcs, core-subnets to be applied first.
 # Plan will fail if either module has not been applied yet.
 
-data "aws_caller_identity" "current" {}
+data "aws_caller_identity" "current" {
+  provider = aws.east
+}
 
 data "aws_ami" "amazon_linux_2023" {
+  provider    = aws.east
   most_recent = true
   owners      = ["amazon"]
 

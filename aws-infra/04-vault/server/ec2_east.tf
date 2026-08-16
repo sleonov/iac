@@ -1,4 +1,5 @@
 resource "aws_instance" "vault" {
+  provider               = aws.east
   ami                    = data.aws_ami.amazon_linux_2023.id
   instance_type          = var.instance_type
   subnet_id              = local.subnet_id
@@ -38,11 +39,11 @@ resource "aws_instance" "vault" {
 
     storage "s3" {
       bucket = "${aws_s3_bucket.vault_storage.id}"
-      region = "${var.region}"
+      region = "${var.east_region}"
     }
 
     seal "awskms" {
-      region     = "${var.region}"
+      region     = "${var.east_region}"
       kms_key_id = "${aws_kms_key.vault_unseal.key_id}"
     }
 
@@ -77,7 +78,7 @@ resource "aws_instance" "vault" {
     if echo "$VAULT_STATUS" | grep -q '"initialized": false'; then
       INIT_OUTPUT=$(vault operator init -format=json)
       aws secretsmanager put-secret-value \
-        --region "${var.region}" \
+        --region "${var.east_region}" \
         --secret-id "${aws_secretsmanager_secret.vault_init.arn}" \
         --secret-string "$INIT_OUTPUT"
     fi
