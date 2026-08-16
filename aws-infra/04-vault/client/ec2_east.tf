@@ -1,4 +1,5 @@
 resource "aws_instance" "vault_client" {
+  provider               = aws.east
   ami                    = data.aws_ami.amazon_linux_2023.id
   instance_type          = var.instance_type
   subnet_id              = local.subnet_id
@@ -33,7 +34,7 @@ resource "aws_instance" "vault_client" {
     # Read Vault server private IP from SSM and write to /etc/profile.d so
     # VAULT_ADDR is available after running: source /etc/profile.d/vault.sh
     VAULT_IP=$(aws ssm get-parameter \
-      --region ${var.region} \
+      --region ${var.east_region} \
       --name /tf/aws-infra/vault/server/private-ip \
       --query Parameter.Value \
       --output text)

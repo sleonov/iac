@@ -6,7 +6,8 @@
 #   CloudWatchAgentServerPolicy  — ship system and Vault audit logs to CloudWatch
 
 resource "aws_iam_role" "vault" {
-  name = "vault-server"
+  provider = aws.east
+  name     = "vault-server"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -19,7 +20,8 @@ resource "aws_iam_role" "vault" {
 }
 
 resource "aws_iam_role_policy" "vault_kms" {
-  name = "vault-kms-unseal"
+  provider = aws.east
+  name     = "vault-kms-unseal"
   role = aws_iam_role.vault.id
 
   policy = jsonencode({
@@ -38,7 +40,8 @@ resource "aws_iam_role_policy" "vault_kms" {
 }
 
 resource "aws_iam_role_policy" "vault_s3" {
-  name = "vault-s3-storage"
+  provider = aws.east
+  name     = "vault-s3-storage"
   role = aws_iam_role.vault.id
 
   policy = jsonencode({
@@ -60,17 +63,20 @@ resource "aws_iam_role_policy" "vault_s3" {
 }
 
 resource "aws_iam_role_policy_attachment" "vault_ssm" {
+  provider   = aws.east
   role       = aws_iam_role.vault.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
 resource "aws_iam_role_policy_attachment" "vault_cloudwatch" {
+  provider   = aws.east
   role       = aws_iam_role.vault.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
 resource "aws_iam_role_policy" "vault_secretsmanager" {
-  name = "vault-secretsmanager-init"
+  provider = aws.east
+  name     = "vault-secretsmanager-init"
   role = aws_iam_role.vault.id
 
   policy = jsonencode({
@@ -84,6 +90,7 @@ resource "aws_iam_role_policy" "vault_secretsmanager" {
 }
 
 resource "aws_iam_instance_profile" "vault" {
-  name = "vault-server"
+  provider = aws.east
+  name     = "vault-server"
   role = aws_iam_role.vault.name
 }
