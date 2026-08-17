@@ -28,5 +28,5 @@ resource "aws_iam_role_policy_attachment" "bastion_cloudwatch" {
 resource "aws_iam_instance_profile" "bastion" {
   provider = aws.east
   name     = "bastion-server"
-  role = aws_iam_role.bastion.name
+  role     = aws_iam_role.bastion.name
 }

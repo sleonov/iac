@@ -22,7 +22,7 @@ resource "aws_iam_role" "vault" {
 resource "aws_iam_role_policy" "vault_kms" {
   provider = aws.east
   name     = "vault-kms-unseal"
-  role = aws_iam_role.vault.id
+  role     = aws_iam_role.vault.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -42,7 +42,7 @@ resource "aws_iam_role_policy" "vault_kms" {
 resource "aws_iam_role_policy" "vault_s3" {
   provider = aws.east
   name     = "vault-s3-storage"
-  role = aws_iam_role.vault.id
+  role     = aws_iam_role.vault.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -77,7 +77,7 @@ resource "aws_iam_role_policy_attachment" "vault_cloudwatch" {
 resource "aws_iam_role_policy" "vault_secretsmanager" {
   provider = aws.east
   name     = "vault-secretsmanager-init"
-  role = aws_iam_role.vault.id
+  role     = aws_iam_role.vault.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -92,5 +92,5 @@ resource "aws_iam_role_policy" "vault_secretsmanager" {
 resource "aws_iam_instance_profile" "vault" {
   provider = aws.east
   name     = "vault-server"
-  role = aws_iam_role.vault.name
+  role     = aws_iam_role.vault.name
 }

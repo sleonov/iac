@@ -85,7 +85,7 @@ resource "aws_instance" "vault" {
   EOT
 
   tags = {
-    Name       = "vault-server"
+    Name              = "vault-server"
     manage-r53-record = ""
   }
 }

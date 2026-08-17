@@ -4,7 +4,7 @@
 data "terraform_remote_state" "core_vpcs" {
   backend = "s3"
   config = {
-    bucket = "terraform-state-607527010331"
+    bucket = local.state_bucket
     key    = "aws-infra/02-networking/core-vpcs/terraform.tfstate"
     region = "us-east-1"
   }
@@ -13,7 +13,7 @@ data "terraform_remote_state" "core_vpcs" {
 data "terraform_remote_state" "core_subnets" {
   backend = "s3"
   config = {
-    bucket = "terraform-state-607527010331"
+    bucket = local.state_bucket
     key    = "aws-infra/02-networking/core-subnets/terraform.tfstate"
     region = "us-east-1"
   }
@@ -22,7 +22,7 @@ data "terraform_remote_state" "core_subnets" {
 data "terraform_remote_state" "core_routing" {
   backend = "s3"
   config = {
-    bucket = "terraform-state-607527010331"
+    bucket = local.state_bucket
     key    = "aws-infra/02-networking/core-routing/terraform.tfstate"
     region = "us-east-1"
   }
@@ -31,7 +31,7 @@ data "terraform_remote_state" "core_routing" {
 data "terraform_remote_state" "iam_bastion" {
   backend = "s3"
   config = {
-    bucket = "terraform-state-607527010331"
+    bucket = local.state_bucket
     key    = "aws-infra/03-iam/bastion/terraform.tfstate"
     region = "us-east-1"
   }
