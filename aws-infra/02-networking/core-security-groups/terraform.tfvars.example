@@ -1,0 +1,5 @@
+# bastion_allowed_cidr is required — no default is intentional.
+# Set this to your current public IP in CIDR notation.
+# Example: curl -s https://checkip.amazonaws.com && echo "/32"
+
+bastion_allowed_cidr = "1.2.3.4/32"

@@ -16,7 +16,8 @@ TF_COMMAND   = $(if $(DESTROY),destroy -auto-approve,$(if $(PLAN),plan,apply -au
 
 .PHONY: help core-vpcs core-subnets core-routing core-security-groups core-nat core-nat-status \
 	core-dns iam-bastion vault-server vault-bootstrap vault-status vault-client \
-	record-manager record-reaper test-record-manager test-record-reaper
+	record-manager record-reaper test-record-manager test-record-reaper \
+	fmt fmt-check validate clean
 
 help:
 	@echo "Usage: make <target> [PLAN=1] [DESTROY=1] [AWS_REGION=us-east-1]"
@@ -43,6 +44,12 @@ help:
 	@echo "Code tests:"
 	@echo "  test-record-manager  record-manager Lambda unit tests"
 	@echo "  test-record-reaper   record-reaper Lambda unit tests"
+	@echo ""
+	@echo "Code quality:"
+	@echo "  fmt                  reformat all .tf files"
+	@echo "  fmt-check            check formatting (non-zero exit if any file needs reformatting)"
+	@echo "  validate             validate all modules (uses -backend=false, requires valid AWS creds)"
+	@echo "  clean                remove all .terraform dirs and generated Lambda zips"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make vault-server"
@@ -100,3 +107,31 @@ record-reaper:
 
 test-record-reaper:
 	cd lambda/record-reaper && pip install -q -r requirements-test.txt && pytest tests/ -v
+
+fmt:
+	terraform fmt -recursive
+
+fmt-check:
+	terraform fmt -check -recursive
+
+# validate: runs terraform validate across every module using -backend=false so no S3 bucket
+# access is required. Valid AWS credentials are still needed — the AWS provider calls
+# sts:GetCallerIdentity during provider configuration, even during validate.
+MODULES := 01-bootstrap \
+           02-networking/core-vpcs 02-networking/core-subnets 02-networking/core-routing \
+           02-networking/core-security-groups 02-networking/core-nat 02-networking/core-dns \
+           03-iam/bastion \
+           04-vault/server 04-vault/bootstrap 04-vault/client \
+           05-dns-automation/record-manager 05-dns-automation/record-reaper
+
+validate:
+	@for mod in $(MODULES); do \
+		echo "→ validating $$mod"; \
+		(cd $$mod && terraform init -backend=false -input=false -upgrade=false > /dev/null && terraform validate) || exit 1; \
+	done
+	@echo "All modules valid."
+
+clean:
+	find . -type d -name ".terraform" -exec rm -rf {} +
+	find . -name "*.zip" -delete
+	@echo "Removed .terraform dirs and generated zips."

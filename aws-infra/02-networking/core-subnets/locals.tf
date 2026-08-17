@@ -1,5 +1,6 @@
 locals {
-  module_name = "02-networking/core-subnets"
+  module_name  = "02-networking/core-subnets"
+  state_bucket = "terraform-state-607527010331"
 
   east_vpc_id   = data.terraform_remote_state.core_vpcs.outputs.east_vpc_id
   east_vpc_cidr = data.terraform_remote_state.core_vpcs.outputs.east_vpc_cidr
