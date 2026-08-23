@@ -3,6 +3,9 @@ resource "aws_security_group" "vault_client" {
   name        = "vault-client"
   description = "Vault client - outbound only, SSM access via instance profile"
   vpc_id      = local.vpc_id
+  tags = {
+    Name = "vault-client"
+  }
 }
 
 # Allow all outbound — needed for SSM, HashiCorp repo, and Vault API calls

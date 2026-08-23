@@ -3,6 +3,9 @@ resource "aws_security_group" "vault" {
   name        = "vault-server"
   description = "Vault server - allows Vault API access from both VPCs"
   vpc_id      = local.vpc_id
+  tags = {
+    Name = "vault-server"
+  }
 }
 
 # Allow Vault API from east VPC

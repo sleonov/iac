@@ -3,6 +3,9 @@ resource "aws_security_group" "nat_east" {
   name        = "nat-east"
   description = "NAT instance - allows inbound from both VPCs for traffic forwarding"
   vpc_id      = local.east_vpc_id
+  tags = {
+    Name = "nat-east"
+  }
 }
 
 # Allow all inbound from east VPC — NAT must accept forwarded traffic from private subnets
