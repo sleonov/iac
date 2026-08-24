@@ -8,13 +8,14 @@ resource "aws_security_group" "bastion_west" {
   }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "bastion_west_ssh" {
+resource "aws_vpc_security_group_ingress_rule" "bastion_west" {
+  for_each          = var.ingress_ports
   provider          = aws.west
   security_group_id = aws_security_group.bastion_west.id
-  description       = "SSH"
-  from_port         = 22
-  to_port           = 22
-  ip_protocol       = "tcp"
+  description       = each.key
+  from_port         = each.value.port_no
+  to_port           = each.value.port_no
+  ip_protocol       = each.value.proto
   cidr_ipv4         = var.bastion_allowed_cidr
 }
 
